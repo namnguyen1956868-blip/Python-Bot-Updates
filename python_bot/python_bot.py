@@ -1,4 +1,4 @@
-"""Python Bot v1.3.0 - desktop website monitor (standard library only)."""
+"""Python Bot v1.3.1 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.3.0'
+VERSION = '1.3.1'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -700,6 +700,25 @@ class PythonBot(tk.Tk):
 
     def page_ksdenki(self):
         self.heading('KS Denki - Tài khoản & Daibiki', 'Quản lý tài khoản KS Denki và ưu tiên thanh toán khi nhận hàng (代金引換).')
+        q = self.panel()
+        self.label(q, 'SẢN PHẨM VÀ THANH TOÁN', 12, bold=True).pack(anchor='w', pady=(0,8))
+        self.label(q, 'Link sản phẩm KS Denki:', 10, MUTED).pack(anchor='w')
+        self.ks_product_url = self.entry(q, 82)
+        self.ks_product_url.insert(0, self.data.get('ksdenki_product_url') or 'https://www.ksdenki.com/item?sku=4562112582837&cate=car_accessories_accessories')
+        self.ks_product_url.pack(anchor='w', pady=5)
+        self.ks_daibiki_var = tk.BooleanVar(value=self.data.get('ksdenki_daibiki', True))
+        tk.Checkbutton(q, text='Ưu tiên 代金引換 (Daibiki – trả tiền mặt khi nhận hàng)',
+                       variable=self.ks_daibiki_var, bg=PANEL, fg=FG,
+                       activebackground=PANEL, activeforeground=FG,
+                       selectcolor='#333741').pack(anchor='w', pady=7)
+        self.button(q, 'Lưu phương thức thanh toán', self.ks_save_payment, True).pack(anchor='w', pady=5)
+        self.label(q, 'Mã SKU sản phẩm thử: 4562112582837 | Số lượng mặc định: 1', 10, MUTED).pack(anchor='w', pady=5)
+        self.button(q, 'CHẠY – Mở sản phẩm và chuẩn bị Daibiki', self.ks_prepare_purchase, True).pack(anchor='w', pady=7)
+        self.button(q, 'Mở sản phẩm bằng Chrome đã đăng nhập', self.ks_open_product).pack(anchor='w', pady=5)
+        self.button(q, 'Hướng dẫn checkout Daibiki', self.ks_daibiki_guide).pack(anchor='w', pady=5)
+        self.label(q, 'Daibiki chỉ có nếu trang thanh toán cho phép đối với sản phẩm này. Kiểm tra phí và tổng tiền trước khi tự nhấn nút xác nhận đơn hàng.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=6)
+
+
         p = self.panel()
         self.label(p, 'TÀI KHOẢN KS DENKI', 12, bold=True).pack(anchor='w', pady=(0,7))
         self.label(p, 'Email tài khoản', 10, MUTED).pack(anchor='w')
@@ -719,24 +738,6 @@ class PythonBot(tk.Tk):
         self.ks_login_status.pack(anchor='w', pady=5)
         self.button(p, 'Mở trang đăng nhập KS Denki', self.ks_open_login).pack(anchor='w', pady=6)
         self.label(p, 'Mật khẩu được giữ trong Windows Credential Manager, không ghi vào config.json. Chrome sẽ điền thông tin; bạn giải CAPTCHA/puzzle và xác nhận khi được yêu cầu.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=(6,2))
-
-        q = self.panel()
-        self.label(q, 'SẢN PHẨM VÀ THANH TOÁN', 12, bold=True).pack(anchor='w', pady=(0,8))
-        self.label(q, 'Link sản phẩm KS Denki:', 10, MUTED).pack(anchor='w')
-        self.ks_product_url = self.entry(q, 82)
-        self.ks_product_url.insert(0, self.data.get('ksdenki_product_url') or 'https://www.ksdenki.com/item?sku=4562112582837&cate=car_accessories_accessories')
-        self.ks_product_url.pack(anchor='w', pady=5)
-        self.ks_daibiki_var = tk.BooleanVar(value=self.data.get('ksdenki_daibiki', True))
-        tk.Checkbutton(q, text='Ưu tiên 代金引換 (Daibiki – trả tiền mặt khi nhận hàng)',
-                       variable=self.ks_daibiki_var, bg=PANEL, fg=FG,
-                       activebackground=PANEL, activeforeground=FG,
-                       selectcolor='#333741').pack(anchor='w', pady=7)
-        self.button(q, 'Lưu phương thức thanh toán', self.ks_save_payment, True).pack(anchor='w', pady=5)
-        self.label(q, 'Mã SKU sản phẩm thử: 4562112582837 | Số lượng mặc định: 1', 10, MUTED).pack(anchor='w', pady=5)
-        self.button(q, 'CHẠY – Mở sản phẩm và chuẩn bị Daibiki', self.ks_prepare_purchase, True).pack(anchor='w', pady=7)
-        self.button(q, 'Mở sản phẩm bằng Chrome đã đăng nhập', self.ks_open_product).pack(anchor='w', pady=5)
-        self.button(q, 'Hướng dẫn checkout Daibiki', self.ks_daibiki_guide).pack(anchor='w', pady=5)
-        self.label(q, 'Daibiki chỉ có nếu trang thanh toán cho phép đối với sản phẩm này. Kiểm tra phí và tổng tiền trước khi tự nhấn nút xác nhận đơn hàng.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=6)
 
         history = self.panel()
         self.label(history, 'NHẬT KÝ KS DENKI', 12, bold=True).pack(anchor='w', pady=(0,7))
