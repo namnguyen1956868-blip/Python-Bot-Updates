@@ -359,6 +359,7 @@ class PythonBot(tk.Tk):
             self.label(p, f'• {t["name"]}  |  {t.get("status", "Chưa kiểm tra")}', 11).pack(anchor='w', pady=8)
         self.button(p, 'Đi đến giám sát', lambda:self.show_page('Giám sát'), True).pack(anchor='w', pady=10)
 
+    # Shipping profile records are stored separately from payments and credentials.
     def profile_records(self):
         """Convert old profile-name strings to editable dictionaries."""
         records = []
