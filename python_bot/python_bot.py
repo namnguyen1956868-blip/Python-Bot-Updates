@@ -1,4 +1,4 @@
-"""Python Bot v0.9.2 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.3 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.2'
+VERSION = '0.9.3'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -338,6 +338,7 @@ class PythonBot(tk.Tk):
                 elif event[0] == 'yamada_status':
                     if self.active_page == 'Yamada Guest' and hasattr(self, 'yamada_status'):
                         self.yamada_status.configure(text=event[1])
+                        self.yamada_log_event(event[1])
                 elif event[0] == 'discord_signal':
                     content = event[2] if len(event) > 2 else ''
                     self.handle_notification(content, 'Discord Bot')
@@ -709,6 +710,21 @@ class PythonBot(tk.Tk):
         self.yamada_status = self.label(p, 'Chưa chạy thử.', 11, MUTED, wraplength=750, justify='left')
         self.yamada_status.pack(anchor='w', pady=10)
         self.label(p, 'AutoCart cần Playwright: py -m pip install playwright. Chrome phải được cài. CAPTCHA và checkout đều để thao tác thủ công.', 10, MUTED, wraplength=750, justify='left').pack(anchor='w', pady=5)
+        history = self.panel()
+        self.label(history, 'NHẬT KÝ YAMADA GUEST', 12, bold=True).pack(anchor='w', pady=(0,7))
+        self.yamada_log = tk.Text(history, height=10, bg='#0b0d12', fg='#cbd4e1', insertbackground='white',
+                                  font=('Consolas', 10), state='disabled', wrap='word', relief='flat')
+        self.yamada_log.pack(fill='both', expand=True)
+        self.yamada_log_event('Sẵn sàng. Chưa thực hiện giao dịch.')
+        self.label(history, 'Không hiển thị, lưu hoặc ghi nhật ký số thẻ, CVV và OTP.', 10, MUTED).pack(anchor='w', pady=5)
+
+    def yamada_log_event(self, detail):
+        if hasattr(self, 'yamada_log') and self.yamada_log.winfo_exists():
+            self.yamada_log.config(state='normal')
+            self.yamada_log.insert('end', '[' + datetime.now().strftime('%H:%M:%S') + '] ' + detail + '\\n')
+            self.yamada_log.see('end')
+            self.yamada_log.config(state='disabled')
+
 
     def yamada_validate_url(self):
         url = self.yamada_url.get().strip()
@@ -726,6 +742,7 @@ class PythonBot(tk.Tk):
         if not url:
             return
         webbrowser.open(url)
+        self.yamada_log_event('Đã mở trang sản phẩm bằng trình duyệt mặc định.')
         self.yamada_status.configure(text='Đã mở trang trong trình duyệt mặc định. Nếu Chrome là mặc định và đã lưu thẻ, Chrome có thể đề xuất Autofill ở bước thanh toán. Bạn tự xác nhận CVV/3DS.')
 
     def yamada_autocart_test(self):
@@ -733,6 +750,7 @@ class PythonBot(tk.Tk):
         if not url:
             return
         self.yamada_status.configure(text='Đang mở Chrome Guest và thử tìm nút thêm vào giỏ...')
+        self.yamada_log_event('Bắt đầu kiểm tra sản phẩm. Không đăng nhập, không đặt hàng.')
         def work():
             try:
                 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
