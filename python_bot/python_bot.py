@@ -1,4 +1,4 @@
-"""Python Bot v0.9.6 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.7 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.6'
+VERSION = '0.9.7'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -786,7 +786,12 @@ class PythonBot(tk.Tk):
                             context = browser.new_context(locale='ja-JP')
                             page = context.new_page()
                             try:
-                                response = page.goto(url, wait_until='domcontentloaded', timeout=30000)
+                                response = page.goto(url, wait_until='commit', timeout=30000)
+                                try:
+                                    page.locator('body').wait_for(state='attached', timeout=12000)
+                                except PWTimeout:
+                                    emit('Trang có phản hồi nhưng chưa hiện nội dung trong 12 giây. Dừng để tránh nhấp sai.')
+                                    return
                             except PWError as exc:
                                 detail = str(exc)
                                 if 'ERR_HTTP2_PROTOCOL_ERROR' in detail and attempt == 0:
@@ -823,7 +828,7 @@ class PythonBot(tk.Tk):
                                  else 'Không tìm thấy nút thêm giỏ khả dụng. Hãy kiểm tra trang bằng Chrome thường.')
                             return
                         except PWTimeout:
-                            emit('Yamada phản hồi quá chậm. Dừng tác vụ; có thể thử lại hoặc đổi mạng.')
+                            emit('Yamada chưa phản hồi trong 30 giây (ngay cả khi chờ commit). Dừng; kiểm tra Chrome thường, proxy và kết nối mạng.')
                             return
                         except Exception as exc:
                             emit('Lỗi Chrome ẩn: ' + str(exc)[:200])
