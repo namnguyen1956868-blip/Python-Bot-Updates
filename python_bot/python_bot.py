@@ -1,4 +1,4 @@
-"""Python Bot v1.2.1 - desktop website monitor (standard library only)."""
+"""Python Bot v1.2.2 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.2.1'
+VERSION = '1.2.2'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -339,6 +339,8 @@ class PythonBot(tk.Tk):
                 elif event[0] == 'ks_status':
                     if self.active_page == 'KS Denki':
                         self.ks_log_event(event[1])
+                        if hasattr(self, 'ks_login_status') and self.ks_login_status.winfo_exists():
+                            self.ks_login_status.configure(text=event[1])
                 elif event[0] == 'gmail_status':
                     if self.active_page == 'Gmail OTP' and hasattr(self, 'gmail_status'):
                         self.gmail_status.config(text=event[1])
@@ -712,6 +714,8 @@ class PythonBot(tk.Tk):
         self.button(p, 'Lưu email + mật khẩu an toàn', self.ks_save_credentials, True).pack(anchor='w', pady=7)
         self.button(p, 'Xóa mật khẩu đã lưu', self.ks_delete_credentials).pack(anchor='w', pady=5)
         self.button(p, 'Mở Chrome và điền đăng nhập', self.ks_auto_login).pack(anchor='w', pady=6)
+        self.ks_login_status = self.label(p, 'Chưa chạy đăng nhập tự động.', 10, MUTED, wraplength=760, justify='left')
+        self.ks_login_status.pack(anchor='w', pady=5)
         self.button(p, 'Mở trang đăng nhập KS Denki', self.ks_open_login).pack(anchor='w', pady=6)
         self.label(p, 'Mật khẩu được giữ trong Windows Credential Manager, không ghi vào config.json. Chrome sẽ điền thông tin; bạn giải CAPTCHA/puzzle và xác nhận khi được yêu cầu.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=(6,2))
 
@@ -791,22 +795,30 @@ class PythonBot(tk.Tk):
             messagebox.showerror('KS Denki', 'Chưa lưu mật khẩu. Nhập và bấm Lưu email + mật khẩu an toàn.')
             return
         self.ks_log_event('Đang mở Chrome để điền email và mật khẩu KS Denki...')
+        self.ks_login_status.configure(text='Đã lấy mật khẩu an toàn. Đang mở Chrome...')
         def work():
             try:
                 from playwright.sync_api import sync_playwright, Error as PWError
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(channel='chrome', headless=False)
+                    self.events.put(('ks_status','Đang khởi động Google Chrome...'))
+                    browser = p.chromium.launch(channel='chrome', headless=False, timeout=15000)
                     try:
                         context = browser.new_context(locale='ja-JP')
                         page = context.new_page()
-                        page.goto('https://www.ksdenki.com/shop/customer/login.aspx', wait_until='domcontentloaded', timeout=30000)
+                        self.events.put(('ks_status','Chrome đã mở; đang truy cập trang đăng nhập KS Denki...'))
+                        try:
+                            page.goto('https://www.ksdenki.com/shop/customer/login.aspx', wait_until='commit', timeout=15000)
+                        except PWError as exc:
+                            self.events.put(('ks_status','Trang đăng nhập phản hồi chậm hoặc lỗi: ' + str(exc)[:120] + '. Có thể mở KS Denki bằng Chrome thường.'))
+                            return
+                        self.events.put(('ks_status','Đã nhận phản hồi; đang tìm ô email/mật khẩu...'))
                         host = (urlparse(page.url).hostname or '').lower()
                         if host not in ('ksdenki.com', 'www.ksdenki.com'):
                             self.events.put(('ks_status','Trang chuyển miền khác; không điền mật khẩu.'))
                             return
                         email_input = page.locator('input[type="email"], input[autocomplete="username"], input[name*="mail" i]').first
                         pw_input = page.locator('input[type="password"]').first
-                        if email_input.count() and pw_input.count():
+                        if email_input.is_visible(timeout=7000) and pw_input.is_visible(timeout=7000):
                             email_input.fill(email, timeout=6000)
                             pw_input.fill(password, timeout=6000)
                             self.events.put(('ks_status','Đã điền email và mật khẩu. Bạn hoàn thành puzzle/CAPTCHA và nhấn ログイン nếu cần.'))
