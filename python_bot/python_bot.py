@@ -1,4 +1,4 @@
-"""Python Bot v0.9.9 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.10 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.9'
+VERSION = '0.9.10'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -780,10 +780,12 @@ class PythonBot(tk.Tk):
                     browser = p.chromium.launch(channel='chrome', headless=False, timeout=20000)
                     try:
                         page = browser.new_context(locale='ja-JP').new_page()
+                        emit('Chrome đã mở; đang chờ phản hồi đầu tiên từ Yamada...')
                         try:
-                            response = page.goto(url, wait_until='commit', timeout=30000)
+                            response = page.goto(url, wait_until='commit', timeout=18000)
+                            emit('Yamada đã phản hồi HTTP; đang đợi nội dung trang...')
                         except PWError as exc:
-                            emit('Chrome tự động không vào được trang: ' + str(exc)[:160] + '. Hãy dùng nút Mở trang Guest (Chrome) nếu trình duyệt thường hoạt động.')
+                            emit('Chrome đã mở nhưng chưa nhận phản hồi trang: ' + str(exc)[:160] + '. Hãy dùng nút Mở trang Guest (Chrome) nếu trình duyệt thường hoạt động.')
                             return
                         if response and response.status >= 400:
                             emit('Yamada trả về HTTP ' + str(response.status) + '. Không thử thêm giỏ.')
@@ -791,12 +793,13 @@ class PythonBot(tk.Tk):
                         try:
                             page.locator('body').wait_for(state='attached', timeout=12000)
                         except PWTimeout:
-                            emit('Trang chưa hiển thị nội dung. Dừng AutoCart; có thể thao tác thủ công trên Chrome.')
+                            emit('Trang chưa hiển thị nội dung sau 12 giây. Không tự nhấp; hãy kiểm tra Chrome.')
                         else:
                             host = (urlparse(page.url).hostname or '').lower()
                             if host not in ('www.yamada-denkiweb.com','yamada-denkiweb.com'):
                                 emit('Trang chuyển miền khác; dừng AutoCart.')
                             else:
+                                emit('Nội dung đã xuất hiện; đang tìm nút カートに入れる...')
                                 clicked = False
                                 for element in (
                                     page.get_by_role('button', name=re.compile('カートに入れる|カートへ入れる|カートに追加')),
@@ -804,7 +807,7 @@ class PythonBot(tk.Tk):
                                     page.locator('input[type=submit][value*="カート"]')
                                 ):
                                     try:
-                                        if element.count() and element.first.is_visible() and element.first.is_enabled():
+                                        if element.first.is_visible(timeout=1800) and element.first.is_enabled(timeout=1800):
                                             element.first.click(timeout=4000)
                                             clicked = True
                                             break
