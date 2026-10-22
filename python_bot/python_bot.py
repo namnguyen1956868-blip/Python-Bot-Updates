@@ -1,4 +1,4 @@
-"""Python Bot v1.2.3 - desktop website monitor (standard library only)."""
+"""Python Bot v1.3.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.2.3'
+VERSION = '1.3.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -724,7 +724,7 @@ class PythonBot(tk.Tk):
         self.label(q, 'SẢN PHẨM VÀ THANH TOÁN', 12, bold=True).pack(anchor='w', pady=(0,8))
         self.label(q, 'Link sản phẩm KS Denki:', 10, MUTED).pack(anchor='w')
         self.ks_product_url = self.entry(q, 82)
-        self.ks_product_url.insert(0, self.data.get('ksdenki_product_url', ''))
+        self.ks_product_url.insert(0, self.data.get('ksdenki_product_url') or 'https://www.ksdenki.com/item?sku=4562112582837&cate=car_accessories_accessories')
         self.ks_product_url.pack(anchor='w', pady=5)
         self.ks_daibiki_var = tk.BooleanVar(value=self.data.get('ksdenki_daibiki', True))
         tk.Checkbutton(q, text='Ưu tiên 代金引換 (Daibiki – trả tiền mặt khi nhận hàng)',
@@ -732,6 +732,8 @@ class PythonBot(tk.Tk):
                        activebackground=PANEL, activeforeground=FG,
                        selectcolor='#333741').pack(anchor='w', pady=7)
         self.button(q, 'Lưu phương thức thanh toán', self.ks_save_payment, True).pack(anchor='w', pady=5)
+        self.label(q, 'Mã SKU sản phẩm thử: 4562112582837 | Số lượng mặc định: 1', 10, MUTED).pack(anchor='w', pady=5)
+        self.button(q, 'CHẠY – Mở sản phẩm và chuẩn bị Daibiki', self.ks_prepare_purchase, True).pack(anchor='w', pady=7)
         self.button(q, 'Mở sản phẩm bằng Chrome đã đăng nhập', self.ks_open_product).pack(anchor='w', pady=5)
         self.button(q, 'Hướng dẫn checkout Daibiki', self.ks_daibiki_guide).pack(anchor='w', pady=5)
         self.label(q, 'Daibiki chỉ có nếu trang thanh toán cho phép đối với sản phẩm này. Kiểm tra phí và tổng tiền trước khi tự nhấn nút xác nhận đơn hàng.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=6)
@@ -886,6 +888,27 @@ class PythonBot(tk.Tk):
         save_data(self.data)
         webbrowser.open(url)
         self.ks_log_event('Đã mở sản phẩm KS Denki. Hãy kiểm tra giỏ và chọn 代金引換 tại bước thanh toán.')
+
+    def ks_prepare_purchase(self):
+        from urllib.parse import parse_qs
+        url = self.ks_product_url.get().strip()
+        parsed = urlparse(url)
+        host = (parsed.hostname or '').lower()
+        if parsed.scheme != 'https' or host not in ('ksdenki.com','www.ksdenki.com'):
+            messagebox.showerror('KS Denki', 'Link sản phẩm phải sử dụng HTTPS và miền www.ksdenki.com.')
+            return
+        sku = parse_qs(parsed.query).get('sku', [''])[0]
+        if not re.fullmatch(r'[0-9]{8,14}', sku):
+            messagebox.showerror('KS Denki', 'Không đọc được mã SKU 8–14 chữ số từ link sản phẩm.')
+            return
+        self.data['ksdenki_product_url'] = url
+        self.data['ksdenki_daibiki'] = self.ks_daibiki_var.get()
+        save_data(self.data)
+        self.ks_log_event('Chuẩn bị sản phẩm SKU ' + sku + ', số lượng dự kiến 1.')
+        self.ks_log_event('Phương thức ưu tiên: ' + ('代金引換 (Daibiki)' if self.ks_daibiki_var.get() else 'Chưa chỉ định'))
+        webbrowser.open(url)
+        self.ks_log_event('Đã mở URL sản phẩm. Bot chưa tự thêm giỏ hoặc gửi đơn; hãy kiểm tra sản phẩm và tổng tiền.')
+        messagebox.showinfo('KS Denki', 'Đã mở sản phẩm SKU ' + sku + ' trong Chrome.\\nChưa đặt hàng hoặc thanh toán.\\nVui lòng kiểm tra tồn kho, chọn Daibiki nếu trang hỗ trợ và tự xác nhận đơn cuối cùng.')
 
     def ks_daibiki_guide(self):
         self.ks_save_payment()
