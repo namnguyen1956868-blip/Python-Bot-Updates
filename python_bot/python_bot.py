@@ -16,7 +16,15 @@ from pathlib import Path
 from tkinter import ttk, messagebox
 from urllib.parse import urlparse
 from update_manager import check_release, download_release
-from jan_match import extract_jan, matches_tasks
+def extract_jan(message):
+    """Read standalone JAN/EAN digits only."""
+    return set(re.findall(r'(?<![0-9])(?:[0-9]{8}|[0-9]{13}|[0-9]{14})(?![0-9])', str(message)))
+
+def matches_tasks(message, tasks):
+    codes = extract_jan(message)
+    return [t for t in tasks if t.get('enabled', True) and str(t.get('jan', '')).strip() in codes and t.get('jan')]
+
+
 
 # Release automation: versioned source is published by GitHub Actions.
 APP_NAME = 'Python Bot'
