@@ -1,4 +1,4 @@
-"""Python Bot v0.5.0 - desktop website monitor (standard library only)."""
+"""Python Bot v0.6.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -16,9 +16,10 @@ from pathlib import Path
 from tkinter import ttk, messagebox
 from urllib.parse import urlparse
 from update_manager import check_release, download_release
+from jan_match import extract_jan, matches_tasks
 
 APP_NAME = 'Python Bot'
-VERSION = '0.5.0'
+VERSION = '0.6.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -29,7 +30,7 @@ MUTED = '#a1a5b1'
 ACCENT = '#ff842b'
 GREEN = '#45d58a'
 
-DEFAULT = {'interval': 90, 'tasks': [], 'profiles': [], 'proxies': [], 'update_url': '', 'discord_channel_id': '', 'discord_auto_start': True, 'discord_auto_monitor': True, 'discord_trigger_on_message': True}
+DEFAULT = {'interval': 90, 'tasks': [], 'profiles': [], 'proxies': [], 'update_url': '', 'discord_channel_id': '', 'discord_auto_start': True, 'discord_auto_monitor': True, 'discord_trigger_on_message': False}
 
 
 def load_data():
@@ -116,7 +117,7 @@ class PythonBot(tk.Tk):
                  font=('Segoe UI', 18, 'bold'), pady=23).pack(fill='x')
         tk.Label(self.sidebar, text='ĐIỀU KHIỂN', fg=MUTED, bg=SIDEBAR,
                  font=('Segoe UI', 9)).pack(anchor='w', padx=20, pady=(16, 8))
-        for name in ('Tổng quan', 'Giám sát', 'Tác vụ', 'Hồ sơ', 'Proxy', 'Discord', 'Cài đặt'):
+        for name in ('Tổng quan', 'Giám sát', 'Tác vụ', 'Hồ sơ', 'Proxy', 'Discord', 'JAN/EAN', 'Cài đặt'):
             b = tk.Button(self.sidebar, text='   '+name, anchor='w', bg=SIDEBAR, fg=FG,
                           activebackground=PANEL, activeforeground=ACCENT, relief='flat',
                           font=('Segoe UI', 11), padx=14, pady=13,
@@ -152,7 +153,7 @@ class PythonBot(tk.Tk):
             btn.configure(bg=PANEL if title == name else SIDEBAR,
                           fg=ACCENT if title == name else FG)
         getattr(self, 'page_' + {'Tổng quan':'overview','Giám sát':'monitor',
-                'Tác vụ':'tasks','Hồ sơ':'profiles','Proxy':'proxy','Discord':'discord','Cài đặt':'settings'}[name])()
+                'Tác vụ':'tasks','Hồ sơ':'profiles','Proxy':'proxy','Discord':'discord','JAN/EAN':'jan','Cài đặt':'settings'}[name])()
 
     def page_overview(self):
         self.heading('Tổng quan', 'Trung tâm điều khiển Python Bot')
@@ -185,6 +186,9 @@ class PythonBot(tk.Tk):
         self.keyword_entry.grid(row=1, column=2, pady=8, sticky='ew')
         self.button(form, '+ Thêm tác vụ', self.add_task, True).grid(row=2, column=0, sticky='w', pady=8)
         self.button(form, 'Kiểm tra một lượt', self.run_once).grid(row=2, column=1, sticky='w', pady=8)
+        self.label(form, 'JAN/EAN của sản phẩm (8, 13 hoặc 14 số):', 10, MUTED).grid(row=3, column=0, columnspan=2, sticky='w', pady=(9,3))
+        self.jan_entry = self.entry(form, 24)
+        self.jan_entry.grid(row=4, column=0, sticky='w', pady=4)
         form.columnconfigure(1, weight=1)
         p = self.panel()
         self.label(p, 'TÁC VỤ GIÁM SÁT', 11, bold=True).pack(anchor='w', pady=(0,10))
@@ -218,19 +222,23 @@ class PythonBot(tk.Tk):
             self.tree.delete(item)
         for idx, t in enumerate(self.data['tasks']):
             status = t.get('status','Chưa kiểm tra') if t.get('enabled',True) else 'Tạm dừng'
-            self.tree.insert('', 'end', iid=str(idx), values=(t['name'],t['url'],t['keyword'],status,t.get('updated','—')))
+            self.tree.insert('', 'end', iid=str(idx), values=(t['name'] + ' [' + t.get('jan','chưa có JAN') + ']',t['url'],t['keyword'],status,t.get('updated','—')))
 
     def add_task(self):
         name, url, keyword = self.name_entry.get().strip(), self.url_entry.get().strip(), self.keyword_entry.get().strip()
+        jan = self.jan_entry.get().strip()
+        if not re.fullmatch(r'(?:[0-9]{8}|[0-9]{13}|[0-9]{14})', jan or ''):
+            messagebox.showerror('JAN/EAN', 'Cần nhập đúng mã JAN/EAN gồm 8, 13 hoặc 14 chữ số.')
+            return
         parsed = urlparse(url)
         if not name or parsed.scheme not in ('https','http') or not parsed.hostname:
             messagebox.showerror('Thiếu thông tin', 'Nhập tên và URL http/https hợp lệ.')
             return
         self.data['tasks'].append({'name':name,'url':url,'keyword':keyword,'enabled':True,
-                                   'status':'Chưa kiểm tra','updated':'—'})
+                                   'status':'Chưa kiểm tra','updated':'—','jan':jan})
         save_data(self.data)
         self.render_tasks()
-        for x in (self.name_entry,self.url_entry,self.keyword_entry): x.delete(0,'end')
+        for x in (self.name_entry,self.url_entry,self.keyword_entry,self.jan_entry): x.delete(0,'end')
 
     def selected_index(self):
         if not self.tree.selection():
@@ -314,28 +322,11 @@ class PythonBot(tk.Tk):
                             self.update_msg.configure(text='Tải thất bại: ' + event[2])
                     elif event[1]:
                         self.apply_downloaded_update(event[1])
-                elif event[0] == 'discord_url':
-                    _, url, source_channel = event
-                    if not any(t['url'] == url for t in self.data['tasks']):
-                        self.data['tasks'].append({'name': 'Discord ' + urlparse(url).netloc,
-                            'url':url, 'keyword':'', 'enabled':True,
-                            'status':'Chưa kiểm tra','updated':'—'})
-                        save_data(self.data)
-                    if self.data.get('discord_auto_monitor', True):
-                        if not self.running:
-                            self.start()
-                        else:
-                            self.run_once()
-                    if self.active_page == 'Giám sát': self.render_tasks()
                 elif event[0] == 'discord_signal':
-                    # Run the current saved tasks on any new authorized-channel message,
-                    # including plain text messages without product links.
-                    if self.data.get('discord_trigger_on_message', True) and self.data.get('discord_auto_monitor', True):
-                        if any(t.get('enabled', True) for t in self.data['tasks']):
-                            if not self.running:
-                                self.start()
-                            else:
-                                self.run_once()
+                    content = event[2] if len(event) > 2 else ''
+                    self.handle_notification(content, 'Discord Bot')
+                elif event[0] == 'discord_url':
+                    pass
                 elif event[0] == 'discord_state':
                     self.discord_state = event[1]
                     if self.active_page == 'Discord':
@@ -380,6 +371,41 @@ class PythonBot(tk.Tk):
                    11, MUTED).pack(anchor='w', pady=10)
         self.label(p, 'Hỗ trợ kết nối proxy sẽ được thêm ở bản phát triển tiếp theo.', 11).pack(anchor='w', pady=10)
 
+    def handle_notification(self, content, source='Thông báo'):
+        codes = extract_jan(content)
+        matching = matches_tasks(content, self.data['tasks'])
+        if not matching:
+            if hasattr(self, 'jan_result') and self.jan_result.winfo_exists():
+                self.jan_result.config(text='Không có tác vụ trùng. Mã: ' + (', '.join(sorted(codes)) or 'không có'))
+            return
+        if hasattr(self, 'jan_result') and self.jan_result.winfo_exists():
+            self.jan_result.config(text='Khớp ' + str(len(matching)) + ' tác vụ: ' + ', '.join(t['name'] for t in matching)[:180])
+        for task in matching:
+            if not task.get('enabled', True):
+                continue
+            task['status'] = 'Đang kiểm tra theo JAN/EAN'
+            url, keyword = task['url'], task.get('keyword', '')
+            def work(u=url, k=keyword):
+                result = fetch_status(u, k)
+                self.events.put(('result', u, k, result, datetime.now().strftime('%H:%M:%S')))
+            threading.Thread(target=work, daemon=True).start()
+        if self.active_page == 'Giám sát':
+            self.render_tasks()
+
+    def page_jan(self):
+        self.heading('Lọc JAN/EAN', 'Chỉ chạy tác vụ có mã 8, 13 hoặc 14 chữ số trùng thông báo. Không tự checkout.')
+        p = self.panel()
+        self.label(p, 'Dán nội dung thông báo Discord để thử bộ lọc:', 11, bold=True).pack(anchor='w', pady=(0,8))
+        self.jan_text = tk.Text(p, height=7, bg='#12141b', fg=FG, insertbackground=FG, relief='flat')
+        self.jan_text.pack(fill='x', pady=6)
+        self.button(p, 'Kiểm tra và chạy tác vụ trùng JAN', self.test_jan, True).pack(anchor='w', pady=8)
+        self.jan_result = self.label(p, 'Chưa kiểm tra', 11, MUTED)
+        self.jan_result.pack(anchor='w', pady=8)
+        self.label(p, 'Chỉ dùng dữ liệu được cấp quyền: dán thủ công hoặc Discord Bot trong server đã cấp quyền.', 10, MUTED, wraplength=700, justify='left').pack(anchor='w', pady=8)
+
+    def test_jan(self):
+        self.handle_notification(self.jan_text.get('1.0', 'end'), 'Dán thử')
+
     def page_discord(self):
         self.heading('Discord', 'Tự thêm và giám sát liên kết nhận từ kênh Discord được cấp quyền')
         p = self.panel()
@@ -394,7 +420,7 @@ class PythonBot(tk.Tk):
         self.discord_trigger_var = tk.BooleanVar(value=self.data.get('discord_trigger_on_message', True))
         for var, txt in ((self.discord_start_var, 'Kết nối Discord khi mở Python Bot'),
                          (self.discord_monitor_var, 'Tự bắt đầu giám sát khi có link mới'),
-                         (self.discord_trigger_var, 'Chạy giám sát khi kênh có tin nhắn mới (kể cả không có link)')):
+                         (self.discord_trigger_var, 'Chỉ chạy khi tin nhắn chứa JAN/EAN trùng tác vụ')):
             tk.Checkbutton(p, text=txt, variable=var, bg=PANEL, fg=FG,
                            activebackground=PANEL, activeforeground=FG,
                            selectcolor='#333741').pack(anchor='w', pady=6)
@@ -406,7 +432,7 @@ class PythonBot(tk.Tk):
                    10, MUTED, wraplength=740, justify='left').pack(anchor='w', pady=8)
         self.label(p, 'Discord Developer Portal: bật Message Content Intent, thêm Bot vào server và cấp View Channel, Read Message History.',
                    10, MUTED, wraplength=740, justify='left').pack(anchor='w', pady=8)
-        self.label(p, 'Nhận tin nhắn mới kể cả từ webhook/bot khác và link trong embed. Tự kiểm tra website; không tự mua hàng.',
+        self.label(p, 'Trong server đã cấp quyền: nhận JAN/EAN từ tin nhắn / embed; chỉ kiểm tra tác vụ trùng mã. Không tự mua hàng.',
                    10, MUTED, wraplength=740, justify='left').pack(anchor='w', pady=8)
 
     def save_discord_settings(self):
