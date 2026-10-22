@@ -1,4 +1,4 @@
-"""Python Bot v1.3.1 - desktop website monitor (standard library only)."""
+"""Python Bot v1.3.2 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.3.1'
+VERSION = '1.3.2'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -713,7 +713,7 @@ class PythonBot(tk.Tk):
                        selectcolor='#333741').pack(anchor='w', pady=7)
         self.button(q, 'Lưu phương thức thanh toán', self.ks_save_payment, True).pack(anchor='w', pady=5)
         self.label(q, 'Mã SKU sản phẩm thử: 4562112582837 | Số lượng mặc định: 1', 10, MUTED).pack(anchor='w', pady=5)
-        self.button(q, 'CHẠY – Mở sản phẩm và chuẩn bị Daibiki', self.ks_prepare_purchase, True).pack(anchor='w', pady=7)
+        self.button(q, 'CHẠY – AutoCart KS Denki', self.ks_prepare_purchase, True).pack(anchor='w', pady=7)
         self.button(q, 'Mở sản phẩm bằng Chrome đã đăng nhập', self.ks_open_product).pack(anchor='w', pady=5)
         self.button(q, 'Hướng dẫn checkout Daibiki', self.ks_daibiki_guide).pack(anchor='w', pady=5)
         self.label(q, 'Daibiki chỉ có nếu trang thanh toán cho phép đối với sản phẩm này. Kiểm tra phí và tổng tiền trước khi tự nhấn nút xác nhận đơn hàng.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=6)
@@ -894,22 +894,83 @@ class PythonBot(tk.Tk):
         from urllib.parse import parse_qs
         url = self.ks_product_url.get().strip()
         parsed = urlparse(url)
-        host = (parsed.hostname or '').lower()
-        if parsed.scheme != 'https' or host not in ('ksdenki.com','www.ksdenki.com'):
-            messagebox.showerror('KS Denki', 'Link sản phẩm phải sử dụng HTTPS và miền www.ksdenki.com.')
+        if parsed.scheme != 'https' or (parsed.hostname or '').lower() not in ('ksdenki.com', 'www.ksdenki.com'):
+            messagebox.showerror('KS Denki', 'Link phải thuộc HTTPS www.ksdenki.com.')
             return
         sku = parse_qs(parsed.query).get('sku', [''])[0]
         if not re.fullmatch(r'[0-9]{8,14}', sku):
-            messagebox.showerror('KS Denki', 'Không đọc được mã SKU 8–14 chữ số từ link sản phẩm.')
+            messagebox.showerror('KS Denki', 'Thiếu mã SKU hợp lệ.')
             return
         self.data['ksdenki_product_url'] = url
         self.data['ksdenki_daibiki'] = self.ks_daibiki_var.get()
         save_data(self.data)
-        self.ks_log_event('Chuẩn bị sản phẩm SKU ' + sku + ', số lượng dự kiến 1.')
-        self.ks_log_event('Phương thức ưu tiên: ' + ('代金引換 (Daibiki)' if self.ks_daibiki_var.get() else 'Chưa chỉ định'))
-        webbrowser.open(url)
-        self.ks_log_event('Đã mở URL sản phẩm. Bot chưa tự thêm giỏ hoặc gửi đơn; hãy kiểm tra sản phẩm và tổng tiền.')
-        messagebox.showinfo('KS Denki', 'Đã mở sản phẩm SKU ' + sku + ' trong Chrome.\\nChưa đặt hàng hoặc thanh toán.\\nVui lòng kiểm tra tồn kho, chọn Daibiki nếu trang hỗ trợ và tự xác nhận đơn cuối cùng.')
+        self.ks_log_event('Bắt đầu AutoCart KS Denki: SKU ' + sku + '; số lượng 1.')
+        self.ks_log_event('Sử dụng phiên Chrome riêng cho bot; nếu chưa đăng nhập, bạn đăng nhập trong cửa sổ này.')
+        def emit(message):
+            self.events.put(('ks_status', message))
+        def work():
+            try:
+                from playwright.sync_api import sync_playwright, Error as PWError
+                with sync_playwright() as p:
+                    profile_folder = DATA_FILE.parent / 'ksdenki_chrome_profile'
+                    profile_folder.mkdir(parents=True, exist_ok=True)
+                    context = p.chromium.launch_persistent_context(
+                        user_data_dir=str(profile_folder), channel='chrome', headless=False,
+                        locale='ja-JP', timeout=20000)
+                    try:
+                        page = context.pages[0] if context.pages else context.new_page()
+                        emit('Chrome KS Denki đã mở. Đang truy cập sản phẩm...')
+                        try:
+                            response = page.goto(url, wait_until='commit', timeout=20000)
+                        except PWError as exc:
+                            emit('Không tải được sản phẩm: ' + str(exc)[:160])
+                            return
+                        if response is not None and response.status >= 400:
+                            emit('Website trả về HTTP ' + str(response.status) + ', đã dừng.')
+                            return
+                        if (urlparse(page.url).hostname or '').lower() not in ('ksdenki.com', 'www.ksdenki.com'):
+                            emit('Trang chuyển miền. Không bấm thêm giỏ.')
+                            return
+                        try:
+                            page.get_by_text('カートに入れる', exact=True).first.wait_for(state='visible', timeout=12000)
+                        except PWError:
+                            emit('Không thấy nút カートに入れる. Kiểm tra đăng nhập, tồn kho hoặc trang sản phẩm.')
+                            return
+                        choices = [
+                            page.get_by_role('button', name='カートに入れる'),
+                            page.locator('input[type="submit"][value*="カート"]'),
+                            page.get_by_text('カートに入れる', exact=True)
+                        ]
+                        for control in choices:
+                            try:
+                                if control.count() and control.first.is_visible(timeout=1200) and control.first.is_enabled(timeout=1200):
+                                    control.first.click(timeout=7000)
+                                    emit('Đã nhấn thêm giỏ một lần. Đang kiểm tra kết quả...')
+                                    break
+                            except PWError:
+                                continue
+                        else:
+                            emit('Không bấm được nút thêm giỏ. Dừng để tránh thao tác nhầm.')
+                            return
+                        page.wait_for_timeout(1400)
+                        emit('Đã thực hiện thao tác thêm giỏ; chưa xác minh số lượng trong giỏ. Kiểm tra giỏ trên Chrome.')
+                        emit('Nếu KS Denki hỗ trợ Daibiki, chọn 代金引換 khi checkout và kiểm tra tổng phí.')
+                        emit('Bot KHÔNG bấm xác nhận đặt hàng cuối cùng.')
+                        while context.pages:
+                            try:
+                                page.wait_for_timeout(500)
+                            except PWError:
+                                break
+                    finally:
+                        try:
+                            context.close()
+                        except Exception:
+                            pass
+            except ImportError:
+                emit('Chưa cài Playwright: py -m pip install playwright')
+            except Exception as exc:
+                emit('AutoCart KS Denki thất bại: ' + str(exc)[:200])
+        threading.Thread(target=work, daemon=True).start()
 
     def ks_daibiki_guide(self):
         self.ks_save_payment()
