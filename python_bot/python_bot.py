@@ -1,4 +1,4 @@
-"""Python Bot v1.3.2 - desktop website monitor (standard library only)."""
+"""Python Bot v1.3.3 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.3.2'
+VERSION = '1.3.3'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -931,29 +931,33 @@ class PythonBot(tk.Tk):
                         if (urlparse(page.url).hostname or '').lower() not in ('ksdenki.com', 'www.ksdenki.com'):
                             emit('Trang chuyển miền. Không bấm thêm giỏ.')
                             return
-                        try:
-                            page.get_by_text('カートに入れる', exact=True).first.wait_for(state='visible', timeout=12000)
-                        except PWError:
-                            emit('Không thấy nút カートに入れる. Kiểm tra đăng nhập, tồn kho hoặc trang sản phẩm.')
-                            return
+                        emit('Trang sản phẩm đã phản hồi. Đang tìm nút thêm vào giỏ...')
                         choices = [
-                            page.get_by_role('button', name='カートに入れる'),
+                            page.get_by_role('button', name=re.compile('カートに入れる')),
                             page.locator('input[type="submit"][value*="カート"]'),
+                            page.locator('button:has-text("カートに入れる")'),
+                            page.locator('a:has-text("カートに入れる")'),
                             page.get_by_text('カートに入れる', exact=True)
                         ]
+                        chosen = None
                         for control in choices:
                             try:
-                                if control.count() and control.first.is_visible(timeout=1200) and control.first.is_enabled(timeout=1200):
-                                    control.first.click(timeout=7000)
-                                    emit('Đã nhấn thêm giỏ một lần. Đang kiểm tra kết quả...')
+                                control.first.wait_for(state='visible', timeout=3500)
+                                if control.first.is_enabled(timeout=1000):
+                                    chosen = control.first
                                     break
                             except PWError:
                                 continue
+                        if chosen is None:
+                            emit('Không thấy nút カートに入れる khả dụng. Giữ Chrome mở để kiểm tra.')
                         else:
-                            emit('Không bấm được nút thêm giỏ. Dừng để tránh thao tác nhầm.')
-                            return
+                            try:
+                                chosen.click(timeout=8000)
+                                emit('Đã bấm カートに入れる một lần. Kiểm tra số giỏ trong Chrome.')
+                            except PWError as exc:
+                                emit('Không bấm được thêm giỏ: ' + str(exc)[:140])
                         page.wait_for_timeout(1400)
-                        emit('Đã thực hiện thao tác thêm giỏ; chưa xác minh số lượng trong giỏ. Kiểm tra giỏ trên Chrome.')
+                        emit('Thao tác hoàn tất; chưa xác minh số lượng giỏ. Không bấm lặp lại.')
                         emit('Nếu KS Denki hỗ trợ Daibiki, chọn 代金引換 khi checkout và kiểm tra tổng phí.')
                         emit('Bot KHÔNG bấm xác nhận đặt hàng cuối cùng.')
                         while context.pages:
