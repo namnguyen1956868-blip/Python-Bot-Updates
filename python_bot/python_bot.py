@@ -1,4 +1,4 @@
-"""Python Bot v1.0.0 - desktop website monitor (standard library only)."""
+"""Python Bot v1.1.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -694,25 +694,53 @@ class PythonBot(tk.Tk):
         self.handle_notification(self.jan_text.get('1.0', 'end'), 'Dán thử')
 
     def page_ksdenki(self):
-        self.heading('KS Denki - tài khoản', 'Dùng tài khoản KS Denki Online Shop trên Chrome thông thường; giữ phiên đăng nhập trong Chrome.')
+        self.heading('KS Denki - Tài khoản & Daibiki', 'Quản lý tài khoản KS Denki và ưu tiên thanh toán khi nhận hàng (代金引換).')
         p = self.panel()
-        self.label(p, 'Trang đăng nhập chính thức:', 11, bold=True).pack(anchor='w', pady=5)
-        self.label(p, 'https://www.ksdenki.com/shop/customer/login.aspx', 10, MUTED).pack(anchor='w', pady=4)
-        self.button(p, 'Mở đăng nhập KS Denki', self.ks_open_login, True).pack(anchor='w', pady=6)
-        self.label(p, 'Đăng nhập bằng tài khoản của bạn trong Chrome. Python Bot không đọc hoặc lưu mật khẩu và không tự xử lý CAPTCHA.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=7)
+        self.label(p, 'TÀI KHOẢN KS DENKI', 12, bold=True).pack(anchor='w', pady=(0,7))
+        self.label(p, 'Email tài khoản (không lưu mật khẩu)', 10, MUTED).pack(anchor='w')
+        self.ks_account_email = self.entry(p, 45)
+        self.ks_account_email.insert(0, self.data.get('ksdenki_account_email', ''))
+        self.ks_account_email.pack(anchor='w', pady=4)
+        self.button(p, 'Lưu email tài khoản', self.ks_save_account, True).pack(anchor='w', pady=7)
+        self.button(p, 'Mở trang đăng nhập KS Denki', self.ks_open_login).pack(anchor='w', pady=6)
+        self.label(p, 'Đăng nhập trong Chrome bằng tài khoản của bạn. Bot không lưu mật khẩu, không tự đăng nhập hay vượt CAPTCHA.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=(6,2))
+
         q = self.panel()
-        self.label(q, 'Link sản phẩm KS Denki:', 11, bold=True).pack(anchor='w', pady=(0,7))
+        self.label(q, 'SẢN PHẨM VÀ THANH TOÁN', 12, bold=True).pack(anchor='w', pady=(0,8))
+        self.label(q, 'Link sản phẩm KS Denki:', 10, MUTED).pack(anchor='w')
         self.ks_product_url = self.entry(q, 82)
         self.ks_product_url.insert(0, self.data.get('ksdenki_product_url', ''))
         self.ks_product_url.pack(anchor='w', pady=5)
-        self.button(q, 'Mở sản phẩm bằng Chrome đã đăng nhập', self.ks_open_product, True).pack(anchor='w', pady=7)
-        self.label(q, 'Thao tác giỏ hàng và checkout hiện thực hiện trên website. Không lưu thẻ/CVV hoặc tự xác nhận đơn hàng.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=5)
+        self.ks_daibiki_var = tk.BooleanVar(value=self.data.get('ksdenki_daibiki', True))
+        tk.Checkbutton(q, text='Ưu tiên 代金引換 (Daibiki – trả tiền mặt khi nhận hàng)',
+                       variable=self.ks_daibiki_var, bg=PANEL, fg=FG,
+                       activebackground=PANEL, activeforeground=FG,
+                       selectcolor='#333741').pack(anchor='w', pady=7)
+        self.button(q, 'Lưu phương thức thanh toán', self.ks_save_payment, True).pack(anchor='w', pady=5)
+        self.button(q, 'Mở sản phẩm bằng Chrome đã đăng nhập', self.ks_open_product).pack(anchor='w', pady=5)
+        self.button(q, 'Hướng dẫn checkout Daibiki', self.ks_daibiki_guide).pack(anchor='w', pady=5)
+        self.label(q, 'Daibiki chỉ có nếu trang thanh toán cho phép đối với sản phẩm này. Kiểm tra phí và tổng tiền trước khi tự nhấn nút xác nhận đơn hàng.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=6)
+
         history = self.panel()
         self.label(history, 'NHẬT KÝ KS DENKI', 12, bold=True).pack(anchor='w', pady=(0,7))
-        self.ks_log = tk.Text(history, height=9, bg='#0b0d12', fg='#cbd4e1',
+        self.ks_log = tk.Text(history, height=7, bg='#0b0d12', fg='#cbd4e1',
                               font=('Consolas',10), state='disabled', wrap='word', relief='flat')
         self.ks_log.pack(fill='both', expand=True)
-        self.ks_log_event('Sẵn sàng. Đăng nhập KS Denki trên Chrome để bắt đầu.')
+        self.ks_log_event('Sẵn sàng. Chọn tài khoản và phương thức Daibiki.')
+
+    def ks_save_account(self):
+        email = self.ks_account_email.get().strip()
+        if email and not re.fullmatch(r'[^@\\s]+@[^@\\s]+\\.[^@\\s]+', email):
+            messagebox.showerror('KS Denki', 'Email không hợp lệ.')
+            return
+        self.data['ksdenki_account_email'] = email
+        save_data(self.data)
+        self.ks_log_event('Đã lưu nhãn email tài khoản. Không lưu mật khẩu.')
+
+    def ks_save_payment(self):
+        self.data['ksdenki_daibiki'] = self.ks_daibiki_var.get()
+        save_data(self.data)
+        self.ks_log_event('Đã lưu ưu tiên thanh toán: ' + ('代金引換 (Daibiki)' if self.ks_daibiki_var.get() else 'Không chỉ định'))
 
     def ks_log_event(self, detail):
         if hasattr(self, 'ks_log') and self.ks_log.winfo_exists():
@@ -722,8 +750,8 @@ class PythonBot(tk.Tk):
             self.ks_log.configure(state='disabled')
 
     def ks_open_login(self):
-        webbrowser.open('https://www.ksdenki.com/shop/customer/login.aspx')
-        self.ks_log_event('Đã mở trang đăng nhập trong trình duyệt mặc định. Đăng nhập thủ công.')
+        webbrowser.open('https://www.ksdenki.com/')
+        self.ks_log_event('Đã mở KS Denki. Chọn ログイン trên website và đăng nhập.')
 
     def ks_open_product(self):
         url = self.ks_product_url.get().strip()
@@ -735,7 +763,17 @@ class PythonBot(tk.Tk):
         self.data['ksdenki_product_url'] = url
         save_data(self.data)
         webbrowser.open(url)
-        self.ks_log_event('Đã mở sản phẩm KS Denki trên trình duyệt mặc định; sử dụng tài khoản đã đăng nhập.')
+        self.ks_log_event('Đã mở sản phẩm KS Denki. Hãy kiểm tra giỏ và chọn 代金引換 tại bước thanh toán.')
+
+    def ks_daibiki_guide(self):
+        self.ks_save_payment()
+        messagebox.showinfo('Thanh toán Daibiki',
+            '1. Đăng nhập KS Denki trong Chrome.\\n'
+            '2. Mở sản phẩm, cho vào giỏ và tiến hành thủ tục đặt hàng.\\n'
+            '3. Tại お支払い方法, chọn 代金引換 nếu có.\\n'
+            '4. Kiểm tra phí, địa chỉ và tổng tiền.\\n'
+            '5. Bạn tự nhấn nút xác nhận cuối cùng để đặt hàng.\\n'
+            'Daibiki thường thu tiền mặt khi nhận hàng. Bot chưa tự điều khiển checkout.')
 
     def page_discord(self):
         self.heading('Discord', 'Tự thêm và giám sát liên kết nhận từ kênh Discord được cấp quyền')
