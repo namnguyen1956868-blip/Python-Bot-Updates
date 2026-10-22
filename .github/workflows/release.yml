@@ -51,9 +51,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: |
-          gh release create "$VERSION" \
-            "Python_Bot_${VERSION}.zip" \
-            "Python_Bot_${VERSION}.zip.sha256" \
-            --title "Python Bot $VERSION" \
-            --notes "Python Bot update $VERSION" \
-            --latest
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" \
+              "Python_Bot_${VERSION}.zip" \
+              "Python_Bot_${VERSION}.zip.sha256" --clobber
+            gh release edit "$VERSION" --latest
+          else
+            gh release create "$VERSION" \
+              "Python_Bot_${VERSION}.zip" \
+              "Python_Bot_${VERSION}.zip.sha256" \
+              --title "Python Bot $VERSION" \
+              --notes "Python Bot update $VERSION" \
+              --latest
+          fi
