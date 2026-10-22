@@ -1,4 +1,4 @@
-﻿Option Explicit
+Option Explicit
 Dim sh, fso, folder, script, shellCmd
 Set sh = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
