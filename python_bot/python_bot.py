@@ -1,4 +1,4 @@
-"""Python Bot v0.9.16 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.17 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.16'
+VERSION = '0.9.17'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -782,16 +782,25 @@ class PythonBot(tk.Tk):
                     try:
                         context = browser.new_context(locale='ja-JP')
                         page = context.new_page()
+                        # Defer nonessential resources; retain scripts, CSS, images and checkout services.
+                        def quick_route(route):
+                            request = route.request
+                            if request.resource_type in ('font', 'media'):
+                                route.abort()
+                            else:
+                                route.continue_()
+                        page.route('**/*', quick_route)
+                        emit('Chế độ tải nhanh: chỉ bỏ font/video; giữ ảnh, CSS, JavaScript.')
                         emit('Đã mở Chromium (Playwright); đang tải trang sản phẩm...')
                         try:
-                            page.goto(url, wait_until='commit', timeout=17000)
+                            page.goto(url, wait_until='commit', timeout=12000)
                         except PWTimeout:
                             # Some sites display their document before navigation completes.
                             emit('Yamada phản hồi chậm; kiểm tra trực tiếp nội dung đang hiện...')
                         except PWError as exc:
                             emit('Lỗi điều hướng: ' + str(exc)[:120] + '. Kiểm tra xem trang có hiển thị được không.')
                         try:
-                            page.locator('body').wait_for(state='visible', timeout=18000)
+                            page.locator('body').wait_for(state='visible', timeout=10000)
                         except PWError:
                             emit('Chưa có nội dung trang sau khi tải. Không bấm nút.')
                             return
@@ -845,7 +854,7 @@ class PythonBot(tk.Tk):
                             return
                         emit('Đã gửi thao tác bấm. Đang chờ trang xác nhận thêm giỏ (không bấm lại)...')
                         try:
-                            page.wait_for_timeout(3500)
+                            page.wait_for_timeout(1800)
                             current = page.url
                             cart_text = ''
                             # Report a narrow, non-sensitive view of the cart counter.
