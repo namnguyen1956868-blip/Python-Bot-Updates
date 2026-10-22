@@ -1,4 +1,4 @@
-"""Python Bot v0.9.0 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.1 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.0'
+VERSION = '0.9.1'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -476,20 +476,76 @@ class PythonBot(tk.Tk):
         self.show_page('Hồ sơ')
 
     def page_cards(self):
-        self.heading('Thẻ thanh toán', 'Chỉ lưu tên thẻ và 4 số cuối; số thẻ và CVV được quản lý bởi Chrome.')
+        self.heading('Thẻ - nhập thử', 'Kiểm tra thông tin thẻ trong phiên chạy. Không lưu số thẻ, CVV hay tự thanh toán.')
         p = self.panel()
-        self.label(p, 'Tên gợi nhớ (ví dụ: EPOS)', 10, MUTED).pack(anchor='w')
+        self.label(p, 'Tên thẻ / ngân hàng (ví dụ EPOS)', 10, MUTED).pack(anchor='w')
         self.card_label = self.entry(p, 34)
-        self.card_label.pack(anchor='w', pady=5)
-        self.label(p, '4 số cuối', 10, MUTED).pack(anchor='w')
+        self.card_label.pack(anchor='w', pady=4)
+        self.label(p, '4 số cuối để lưu nhãn thẻ (tùy chọn)', 10, MUTED).pack(anchor='w')
         self.card_last4 = self.entry(p, 12)
-        self.card_last4.pack(anchor='w', pady=5)
-        self.button(p, 'Lưu nhãn thẻ', self.save_card_label, True).pack(anchor='w', pady=8)
+        self.card_last4.pack(anchor='w', pady=4)
+        self.button(p, 'Lưu tên và 4 số cuối', self.save_card_label).pack(anchor='w', pady=8)
         for card in self.data.get('card_labels', []):
-            self.label(p, str(card.get('label','')) + '  •••• ' + str(card.get('last4','')), 11).pack(anchor='w', pady=4)
-        self.label(p, 'Mở chrome://settings/payments trong Chrome để lưu và chọn thẻ bằng tính năng Autofill của trình duyệt.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=(14,4))
-        self.button(p, 'Hướng dẫn mở thiết lập thẻ Chrome', lambda: messagebox.showinfo('Chrome', 'Mở Chrome và dán vào thanh địa chỉ: chrome://settings/payments')).pack(anchor='w')
-        self.label(p, 'Không nhập số thẻ đầy đủ, CVV hoặc OTP vào Python Bot. Chrome Guest Playwright đang chạy bằng phiên tạm và chưa sử dụng thẻ đã lưu trong Chrome.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=8)
+            self.label(p, str(card.get('label','')) + '  •••• ' + str(card.get('last4','')), 11).pack(anchor='w', pady=3)
+
+        test = self.panel()
+        self.label(test, 'KIỂM TRA NHẬP THẺ - KHÔNG GỬI ĐẾN WEBSITE', 12, bold=True).pack(anchor='w', pady=(0,8))
+        self.label(test, 'Số thẻ (chỉ giữ trong ô nhập đến khi bạn xóa/đóng ứng dụng)', 10, MUTED).pack(anchor='w')
+        self.test_pan = self.entry(test, 36)
+        self.test_pan.config(show='●')
+        self.test_pan.pack(anchor='w', pady=4)
+        self.label(test, 'Hết hạn MM/YY', 10, MUTED).pack(anchor='w')
+        self.test_exp = self.entry(test, 10)
+        self.test_exp.pack(anchor='w', pady=4)
+        self.label(test, 'CVV/CVC (không lưu)', 10, MUTED).pack(anchor='w')
+        self.test_cvv = self.entry(test, 10)
+        self.test_cvv.config(show='●')
+        self.test_cvv.pack(anchor='w', pady=4)
+        row = tk.Frame(test, bg=PANEL)
+        row.pack(anchor='w', pady=9)
+        self.button(row, 'Kiểm tra định dạng', self.validate_test_card, True).pack(side='left', padx=(0,9))
+        self.button(row, 'Xóa thông tin nhạy cảm', self.clear_test_card).pack(side='left')
+        self.card_test_result = self.label(test, 'Chưa kiểm tra', 10, MUTED)
+        self.card_test_result.pack(anchor='w', pady=5)
+        self.label(test, 'Chỉ kiểm tra định dạng, không xác nhận thẻ tồn tại/hợp lệ để thanh toán. Sử dụng Chrome Autofill cho checkout và nhập CVV, OTP bằng tay.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=6)
+        self.button(test, 'Hướng dẫn thiết lập thẻ Chrome', lambda: messagebox.showinfo('Chrome', 'Mở Chrome và dán: chrome://settings/payments')).pack(anchor='w', pady=5)
+
+    def clear_test_card(self):
+        for field in ('test_pan', 'test_exp', 'test_cvv'):
+            widget = getattr(self, field, None)
+            if widget and widget.winfo_exists():
+                widget.delete(0, 'end')
+        if hasattr(self, 'card_test_result') and self.card_test_result.winfo_exists():
+            self.card_test_result.config(text='Đã xóa dữ liệu thử.')
+
+    def validate_test_card(self):
+        from datetime import datetime as _dt
+        pan = re.sub(r'[ -]', '', self.test_pan.get())
+        expiry = self.test_exp.get().strip()
+        cvv = self.test_cvv.get().strip()
+        errors = []
+        if not re.fullmatch(r'[0-9]{12,19}', pan):
+            errors.append('Số thẻ cần 12–19 chữ số.')
+        else:
+            total = 0
+            for index, digit in enumerate(reversed(pan)):
+                num = int(digit)
+                if index % 2:
+                    num *= 2
+                    if num > 9: num -= 9
+                total += num
+            if total % 10:
+                errors.append('Số thẻ không đạt kiểm tra Luhn.')
+        m = re.fullmatch(r'(0[1-9]|1[0-2])/([0-9]{2})', expiry)
+        if not m:
+            errors.append('Hết hạn theo MM/YY.')
+        elif (2000+int(m.group(2)), int(m.group(1))) < (_dt.now().year, _dt.now().month):
+            errors.append('Thẻ đã hết hạn.')
+        if not re.fullmatch(r'[0-9]{3,4}', cvv):
+            errors.append('CVV cần 3 hoặc 4 chữ số.')
+        self.card_test_result.config(text='; '.join(errors) if errors else 'Định dạng hợp lệ (chưa xác minh thanh toán).')
+        self.clear_test_card()
+        self.card_test_result.config(text='; '.join(errors) if errors else 'Định dạng hợp lệ; thông tin nhạy cảm đã xóa.')
 
     def save_card_label(self):
         label, last4 = self.card_label.get().strip(), self.card_last4.get().strip()
