@@ -1,4 +1,4 @@
-"""Python Bot v1.2.0 - desktop website monitor (standard library only)."""
+"""Python Bot v1.2.1 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.2.0'
+VERSION = '1.2.1'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -740,7 +740,7 @@ class PythonBot(tk.Tk):
 
     def ks_save_account(self):
         email = self.ks_account_email.get().strip()
-        if email and not re.fullmatch(r'[^@\\s]+@[^@\\s]+\\.[^@\\s]+', email):
+        if email and not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
             messagebox.showerror('KS Denki', 'Email không hợp lệ.')
             return
         self.data['ksdenki_account_email'] = email
@@ -750,7 +750,7 @@ class PythonBot(tk.Tk):
     def ks_save_credentials(self):
         email = self.ks_account_email.get().strip()
         password = self.ks_password.get()
-        if not re.fullmatch(r'[^@\\s]+@[^@\\s]+\\.[^@\\s]+', email or '') or not password:
+        if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email or '') or not password:
             messagebox.showerror('KS Denki', 'Hãy nhập email hợp lệ và mật khẩu.')
             return
         try:
