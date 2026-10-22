@@ -1,4 +1,4 @@
-"""Python Bot v0.9.14 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.15 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.14'
+VERSION = '0.9.15'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -799,15 +799,27 @@ class PythonBot(tk.Tk):
                         if host not in ('www.yamada-denkiweb.com', 'yamada-denkiweb.com'):
                             emit('Trang chuyển miền khác. Dừng để kiểm tra.')
                             return
-                        # The cookie notice can intercept pointer events at the bottom of Yamada.
+                        # Cookie notice on this storefront may use a non-button element.
+                        # Confirm it disappeared before trying the cart button.
                         try:
-                            cookie_ok = page.get_by_role('button', name='OK', exact=True)
-                            if cookie_ok.count() and cookie_ok.first.is_visible(timeout=1500):
-                                emit('Phát hiện thông báo Cookie; đang xác nhận OK...')
-                                cookie_ok.first.click(timeout=4500)
-                                emit('Đã xử lý thông báo Cookie.')
+                            ok_options = [
+                                page.get_by_role('button', name='OK', exact=True),
+                                page.get_by_text('OK', exact=True),
+                                page.locator('input[value="OK"]')
+                            ]
+                            for cookie_ok in ok_options:
+                                if cookie_ok.count() and cookie_ok.first.is_visible(timeout=1500):
+                                    emit('Có nút OK của thông báo Cookie; đang xác nhận...')
+                                    cookie_ok.first.click(timeout=4500)
+                                    page.wait_for_timeout(450)
+                                    break
+                            visible_ok = page.get_by_text('OK', exact=True)
+                            if visible_ok.count() and visible_ok.first.is_visible(timeout=1200):
+                                emit('Bảng Cookie vẫn hiển thị. Hãy bấm OK thủ công; bot dừng trước thêm giỏ.')
+                                return
                         except PWError as exc:
-                            emit('Không tự đóng được bảng Cookie: ' + str(exc)[:100])
+                            emit('Chưa xử lý được thông báo Cookie: ' + str(exc)[:120])
+                            return
                         emit('Đã nhận nội dung. Đang tìm nút カートに入れる...')
                         options = [
                             page.get_by_role('button', name='カートに入れる'),
