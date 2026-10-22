@@ -1,0 +1,10 @@
+HƯỚNG DẪN PHÁT HÀNH BẢN MỚI
+
+A. Đưa version trong python_bot.py lên 0.2.1, đóng ZIP với python_bot/ ở đầu.
+B. Tạo mã SHA-256 trong PowerShell: Get-FileHash .\Python_Bot_v0.2.1.zip -Algorithm SHA256
+C. Đăng file ZIP tại một URL HTTPS tải trực tiếp (ví dụ GitHub Release asset).
+D. Đăng file latest.json trên địa chỉ HTTPS ổn định chứa version, url, sha256.
+E. Trong bot, chỉ cần nhập URL latest.json MỘT LẦN.
+F. Từ lần sau bấm Kiểm tra cập nhật > Tải và cài bản mới.
+
+LƯU Ý: đây là cập nhật theo yêu cầu người dùng, KHÔNG tự tải ngầm. Tính tin cậy phụ thuộc máy chủ latest.json; HTTPS và hash không thay thế chữ ký số.
