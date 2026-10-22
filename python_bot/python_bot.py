@@ -1,4 +1,4 @@
-"""Python Bot v0.9.3 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.4 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.3'
+VERSION = '0.9.4'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -88,6 +88,10 @@ class PythonBot(tk.Tk):
         self.minsize(900, 620)
         self.configure(bg=BG)
         self.data = load_data()
+        # Sensitive card fields live only in Tk memory, never in config.json.
+        self.session_card_pan = tk.StringVar(master=self)
+        self.session_card_exp = tk.StringVar(master=self)
+        self.session_card_cvv = tk.StringVar(master=self)
         self.events = queue.Queue()
         self.running = False
         self.worker = None
@@ -493,14 +497,15 @@ class PythonBot(tk.Tk):
         self.label(test, 'KIỂM TRA NHẬP THẺ - KHÔNG GỬI ĐẾN WEBSITE', 12, bold=True).pack(anchor='w', pady=(0,8))
         self.label(test, 'Số thẻ (chỉ giữ trong ô nhập đến khi bạn xóa/đóng ứng dụng)', 10, MUTED).pack(anchor='w')
         self.test_pan = self.entry(test, 36)
-        self.test_pan.config(show='●')
+        self.test_pan.config(show='●', textvariable=self.session_card_pan)
         self.test_pan.pack(anchor='w', pady=4)
         self.label(test, 'Hết hạn MM/YY', 10, MUTED).pack(anchor='w')
         self.test_exp = self.entry(test, 10)
+        self.test_exp.config(textvariable=self.session_card_exp)
         self.test_exp.pack(anchor='w', pady=4)
         self.label(test, 'CVV/CVC (không lưu)', 10, MUTED).pack(anchor='w')
         self.test_cvv = self.entry(test, 10)
-        self.test_cvv.config(show='●')
+        self.test_cvv.config(show='●', textvariable=self.session_card_cvv)
         self.test_cvv.pack(anchor='w', pady=4)
         row = tk.Frame(test, bg=PANEL)
         row.pack(anchor='w', pady=9)
@@ -531,12 +536,11 @@ class PythonBot(tk.Tk):
 
 
     def clear_test_card(self):
-        for field in ('test_pan', 'test_exp', 'test_cvv'):
-            widget = getattr(self, field, None)
-            if widget and widget.winfo_exists():
-                widget.delete(0, 'end')
+        self.session_card_pan.set('')
+        self.session_card_exp.set('')
+        self.session_card_cvv.set('')
         if hasattr(self, 'card_test_result') and self.card_test_result.winfo_exists():
-            self.card_test_result.config(text='Đã xóa dữ liệu thử.')
+            self.card_test_result.config(text='Đã xóa thông tin nhạy cảm trong phiên.')
 
     def validate_test_card(self):
         from datetime import datetime as _dt
@@ -564,8 +568,7 @@ class PythonBot(tk.Tk):
         if not re.fullmatch(r'[0-9]{3,4}', cvv):
             errors.append('CVV cần 3 hoặc 4 chữ số.')
         self.card_test_result.config(text='; '.join(errors) if errors else 'Định dạng hợp lệ (chưa xác minh thanh toán).')
-        self.clear_test_card()
-        self.card_test_result.config(text='; '.join(errors) if errors else 'Định dạng hợp lệ; thông tin nhạy cảm đã xóa.')
+        self.card_test_result.config(text='; '.join(errors) if errors else 'Định dạng hợp lệ. Dữ liệu chỉ tồn tại trong phiên; dùng nút Xóa khi xong.')
 
     def save_card_label(self):
         label, last4 = self.card_label.get().strip(), self.card_last4.get().strip()
@@ -702,6 +705,22 @@ class PythonBot(tk.Tk):
             values=['Chưa chọn'] + [str(v.get('label','')) for v in self.profile_records()])
         self.yamada_profile.current(0)
         self.yamada_profile.pack(anchor='w', pady=4)
+        sec = self.panel()
+        self.label(sec, 'THẺ TRONG PHIÊN (KHÔNG LƯU VÀO FILE)', 12, bold=True).pack(anchor='w', pady=(0,7))
+        self.label(sec, 'Số thẻ', 10, MUTED).pack(anchor='w')
+        pan_entry = self.entry(sec, 40)
+        pan_entry.config(show='●', textvariable=self.session_card_pan)
+        pan_entry.pack(anchor='w', pady=3)
+        self.label(sec, 'Hết hạn (MM/YY)', 10, MUTED).pack(anchor='w')
+        expiry_entry = self.entry(sec, 12)
+        expiry_entry.config(textvariable=self.session_card_exp)
+        expiry_entry.pack(anchor='w', pady=3)
+        self.label(sec, 'CVV/CVC', 10, MUTED).pack(anchor='w')
+        cvv_entry = self.entry(sec, 12)
+        cvv_entry.config(show='●', textvariable=self.session_card_cvv)
+        cvv_entry.pack(anchor='w', pady=3)
+        self.button(sec, 'Xóa dữ liệu thẻ trong phiên', self.clear_test_card).pack(anchor='w', pady=7)
+        self.label(sec, 'Các ô này chỉ dùng để chuẩn bị và kiểm tra nhập liệu. Phiên bản này chưa tự chuyển số thẻ hoặc CVV vào checkout Yamada, chưa tự đặt hàng.', 10, MUTED, wraplength=730, justify='left').pack(anchor='w', pady=5)
         self.label(p, 'Chế độ thử an toàn: mở trang và thử thêm giỏ; luôn dừng trước xác nhận đơn hàng.', 10, MUTED, wraplength=740).pack(anchor='w', pady=7)
         row = tk.Frame(p, bg=PANEL)
         row.pack(anchor='w', pady=10)
@@ -930,6 +949,7 @@ class PythonBot(tk.Tk):
         messagebox.showinfo('Đã lưu','Đã cập nhật cài đặt. Dừng/bắt đầu lại giám sát để áp dụng chu kỳ mới.')
 
     def on_close(self):
+        self.clear_test_card()
         self.running = False
         self.destroy()
 
