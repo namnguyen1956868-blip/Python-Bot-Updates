@@ -1,4 +1,4 @@
-"""Python Bot v0.9.15 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.16 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.15'
+VERSION = '0.9.16'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -843,18 +843,32 @@ class PythonBot(tk.Tk):
                         except PWError as exc:
                             emit('Không bấm được nút thêm giỏ: ' + str(exc)[:145])
                             return
-                        emit('Đã bấm nút カートに入れる trên Yamada. Đang xác minh giỏ...')
+                        emit('Đã gửi thao tác bấm. Đang chờ trang xác nhận thêm giỏ (không bấm lại)...')
                         try:
-                            page.wait_for_timeout(1300)
-                            indicator = page.locator('a[href*="cart"], [class*="cart"], [id*="cart"]')
-                            cart_text = ' '.join(indicator.all_text_contents()[:12])[:250]
-                            success_hint = bool(re.search(r'カートに入れました|カートに追加|商品がカート|カートを見る', page.locator('body').inner_text(timeout=4500)))
-                            if success_hint or re.search(r'カート\\s*[1-9]', cart_text):
-                                emit('Có dấu hiệu sản phẩm đã vào giỏ. Hãy kiểm tra giỏ trước khi thanh toán.')
+                            page.wait_for_timeout(3500)
+                            current = page.url
+                            cart_text = ''
+                            # Report a narrow, non-sensitive view of the cart counter.
+                            for locator in (
+                                page.locator('header a[href*="cart"]'),
+                                page.get_by_role('link', name=re.compile('カート')),
+                                page.locator('[class*="cart"]')
+                            ):
+                                try:
+                                    if locator.count():
+                                        cart_text = locator.first.inner_text(timeout=1200).strip()[:80]
+                                        if cart_text:
+                                            break
+                                except PWError:
+                                    continue
+                            emit('URL sau thao tác: ' + current[:150])
+                            emit('Nội dung chỉ báo giỏ: ' + (cart_text or '(không đọc được)'))
+                            if current != url and ('cart' in current.lower() or 'basket' in current.lower()):
+                                emit('Đã chuyển đến trang giỏ. Kiểm tra sản phẩm và số lượng.')
                             else:
-                                emit('Đã nhấn nhưng chưa xác nhận được sản phẩm trong giỏ. Hãy kiểm tra Chrome.')
-                        except PWError:
-                            emit('Đã nhấn, chưa xác minh giỏ do trang thay đổi. Hãy kiểm tra Chrome.')
+                                emit('Chưa có bằng chứng thêm giỏ thành công. Không tự nhấn lại; kiểm tra biểu tượng giỏ và thông báo Yamada.')
+                        except PWError as exc:
+                            emit('Lỗi xác minh giỏ: ' + str(exc)[:145])
                         emit('Chrome giữ mở để bạn kiểm tra và tự thao tác checkout/3DS.')
                         while not page.is_closed():
                             try:
