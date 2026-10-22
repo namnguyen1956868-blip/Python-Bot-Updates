@@ -717,7 +717,7 @@ class PythonBot(tk.Tk):
     def ks_log_event(self, detail):
         if hasattr(self, 'ks_log') and self.ks_log.winfo_exists():
             self.ks_log.configure(state='normal')
-            self.ks_log.insert('end', '[' + datetime.now().strftime('%H:%M:%S') + '] ' + detail + '\\n')
+            self.ks_log.insert('end', '[' + datetime.now().strftime('%H:%M:%S') + '] ' + detail + '\n')
             self.ks_log.see('end')
             self.ks_log.configure(state='disabled')
 
