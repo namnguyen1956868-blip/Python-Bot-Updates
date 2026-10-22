@@ -1,4 +1,4 @@
-"""Python Bot v1.3.3 - desktop website monitor (standard library only)."""
+"""Python Bot v1.3.4 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.3.3'
+VERSION = '1.3.4'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -905,6 +905,8 @@ class PythonBot(tk.Tk):
         self.data['ksdenki_daibiki'] = self.ks_daibiki_var.get()
         save_data(self.data)
         self.ks_log_event('Bắt đầu AutoCart KS Denki: SKU ' + sku + '; số lượng 1.')
+        if hasattr(self, 'ks_login_status'):
+            self.ks_login_status.configure(text='Đã bấm CHẠY; đang khởi động Chrome. Xem nhật ký KS Denki để biết trạng thái.')
         self.ks_log_event('Sử dụng phiên Chrome riêng cho bot; nếu chưa đăng nhập, bạn đăng nhập trong cửa sổ này.')
         def emit(message):
             self.events.put(('ks_status', message))
@@ -914,9 +916,16 @@ class PythonBot(tk.Tk):
                 with sync_playwright() as p:
                     profile_folder = DATA_FILE.parent / 'ksdenki_chrome_profile'
                     profile_folder.mkdir(parents=True, exist_ok=True)
-                    context = p.chromium.launch_persistent_context(
-                        user_data_dir=str(profile_folder), channel='chrome', headless=False,
-                        locale='ja-JP', timeout=20000)
+                    emit('Đang khởi động Chrome với hồ sơ KS Denki...')
+                    try:
+                        context = p.chromium.launch_persistent_context(
+                            user_data_dir=str(profile_folder), channel='chrome', headless=False,
+                            locale='ja-JP', timeout=12000)
+                    except PWError as launch_error:
+                        emit('Không mở được Chrome với hồ sơ đã lưu: ' + str(launch_error)[:130])
+                        emit('Có thể hồ sơ Chrome đang được dùng. Đóng cửa sổ Chrome của bot rồi thử lại; không xóa hồ sơ hoặc mật khẩu.')
+                        return
+                    emit('Đã khởi động Chrome thành công.')
                     try:
                         page = context.pages[0] if context.pages else context.new_page()
                         emit('Chrome KS Denki đã mở. Đang truy cập sản phẩm...')
