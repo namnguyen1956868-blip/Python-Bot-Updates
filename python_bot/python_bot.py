@@ -1,4 +1,4 @@
-"""Python Bot v0.9.10 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.11 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.10'
+VERSION = '0.9.11'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -725,7 +725,7 @@ class PythonBot(tk.Tk):
         row = tk.Frame(p, bg=PANEL)
         row.pack(anchor='w', pady=10)
         self.button(row, 'Mở trang Guest (Chrome)', self.yamada_open_guest, True).pack(side='left', padx=(0,8))
-        self.button(row, 'Thử AutoCart (Chrome hiện)', self.yamada_autocart_test).pack(side='left')
+        self.button(row, 'AutoCart thật (thêm giỏ)', self.yamada_autocart_test).pack(side='left')
         self.button(row, 'Mở trong trình duyệt thật', self.yamada_open_guest).pack(side='left', padx=(8,0))
         self.yamada_status = self.label(p, 'Chưa chạy thử.', 11, MUTED, wraplength=750, justify='left')
         self.yamada_status.pack(anchor='w', pady=10)
@@ -769,8 +769,8 @@ class PythonBot(tk.Tk):
         url = self.yamada_validate_url()
         if not url:
             return
-        self.yamada_status.configure(text='Đang thử mở Chrome có hiển thị...')
-        self.yamada_log_event('Mở Chrome hiển thị để thử giỏ hàng; không tự checkout.')
+        self.yamada_status.configure(text='Đang mở sản phẩm Yamada để thêm vào giỏ thật...')
+        self.yamada_log_event('Bắt đầu AutoCart thật (chỉ thêm giỏ, không đặt hàng).')
         def emit(msg):
             self.events.put(('yamada_status', msg))
         def work():
@@ -779,43 +779,61 @@ class PythonBot(tk.Tk):
                 with sync_playwright() as p:
                     browser = p.chromium.launch(channel='chrome', headless=False, timeout=20000)
                     try:
-                        page = browser.new_context(locale='ja-JP').new_page()
-                        emit('Chrome đã mở; đang chờ phản hồi đầu tiên từ Yamada...')
+                        context = browser.new_context(locale='ja-JP')
+                        page = context.new_page()
+                        emit('Đã mở Chrome; đang tải trang sản phẩm...')
                         try:
-                            response = page.goto(url, wait_until='commit', timeout=18000)
-                            emit('Yamada đã phản hồi HTTP; đang đợi nội dung trang...')
-                        except PWError as exc:
-                            emit('Chrome đã mở nhưng chưa nhận phản hồi trang: ' + str(exc)[:160] + '. Hãy dùng nút Mở trang Guest (Chrome) nếu trình duyệt thường hoạt động.')
-                            return
-                        if response and response.status >= 400:
-                            emit('Yamada trả về HTTP ' + str(response.status) + '. Không thử thêm giỏ.')
-                            return
-                        try:
-                            page.locator('body').wait_for(state='attached', timeout=12000)
+                            page.goto(url, wait_until='commit', timeout=17000)
                         except PWTimeout:
-                            emit('Trang chưa hiển thị nội dung sau 12 giây. Không tự nhấp; hãy kiểm tra Chrome.')
-                        else:
-                            host = (urlparse(page.url).hostname or '').lower()
-                            if host not in ('www.yamada-denkiweb.com','yamada-denkiweb.com'):
-                                emit('Trang chuyển miền khác; dừng AutoCart.')
+                            # Some sites display their document before navigation completes.
+                            emit('Yamada phản hồi chậm; kiểm tra trực tiếp nội dung đang hiện...')
+                        except PWError as exc:
+                            emit('Lỗi điều hướng: ' + str(exc)[:120] + '. Kiểm tra xem trang có hiển thị được không.')
+                        try:
+                            page.locator('body').wait_for(state='visible', timeout=18000)
+                        except PWError:
+                            emit('Chưa có nội dung trang sau khi tải. Không bấm nút.')
+                            return
+                        host = (urlparse(page.url).hostname or '').lower()
+                        if host not in ('www.yamada-denkiweb.com', 'yamada-denkiweb.com'):
+                            emit('Trang chuyển miền khác. Dừng để kiểm tra.')
+                            return
+                        emit('Đã nhận nội dung. Đang tìm nút カートに入れる...')
+                        options = [
+                            page.get_by_role('button', name='カートに入れる'),
+                            page.get_by_role('link', name='カートに入れる'),
+                            page.get_by_text('カートに入れる', exact=True),
+                            page.locator('input[type="submit"][value*="カート"]')
+                        ]
+                        chosen = None
+                        for option in options:
+                            try:
+                                if option.count() and option.first.is_visible(timeout=1500) and option.first.is_enabled(timeout=1500):
+                                    chosen = option.first
+                                    break
+                            except PWError:
+                                continue
+                        if chosen is None:
+                            emit('Không thấy nút カートに入れる đang hoạt động. Chưa thêm giỏ.')
+                            return
+                        try:
+                            chosen.click(timeout=8000)
+                        except PWError as exc:
+                            emit('Không bấm được nút thêm giỏ: ' + str(exc)[:145])
+                            return
+                        emit('Đã bấm nút カートに入れる trên Yamada. Đang xác minh giỏ...')
+                        try:
+                            page.wait_for_timeout(1300)
+                            indicator = page.locator('a[href*="cart"], [class*="cart"], [id*="cart"]')
+                            cart_text = ' '.join(indicator.all_text_contents()[:12])[:250]
+                            success_hint = bool(re.search(r'カートに入れました|カートに追加|商品がカート|カートを見る', page.locator('body').inner_text(timeout=4500)))
+                            if success_hint or re.search(r'カート\\s*[1-9]', cart_text):
+                                emit('Có dấu hiệu sản phẩm đã vào giỏ. Hãy kiểm tra giỏ trước khi thanh toán.')
                             else:
-                                emit('Nội dung đã xuất hiện; đang tìm nút カートに入れる...')
-                                clicked = False
-                                for element in (
-                                    page.get_by_role('button', name=re.compile('カートに入れる|カートへ入れる|カートに追加')),
-                                    page.get_by_role('link', name=re.compile('カートに入れる|カートへ入れる|カートに追加')),
-                                    page.locator('input[type=submit][value*="カート"]')
-                                ):
-                                    try:
-                                        if element.first.is_visible(timeout=1800) and element.first.is_enabled(timeout=1800):
-                                            element.first.click(timeout=4000)
-                                            clicked = True
-                                            break
-                                    except PWError:
-                                        continue
-                                emit('Đã thử thêm vào giỏ; hãy kiểm tra Chrome. Không tự checkout.' if clicked
-                                     else 'Chưa tìm thấy nút thêm giỏ. Hãy kiểm tra và thao tác thủ công trên Chrome.')
-                        emit('Chrome sẽ giữ mở cho đến khi bạn đóng cửa sổ.')
+                                emit('Đã nhấn nhưng chưa xác nhận được sản phẩm trong giỏ. Hãy kiểm tra Chrome.')
+                        except PWError:
+                            emit('Đã nhấn, chưa xác minh giỏ do trang thay đổi. Hãy kiểm tra Chrome.')
+                        emit('Chrome giữ mở để bạn kiểm tra và tự thao tác checkout/3DS.')
                         while not page.is_closed():
                             try:
                                 page.wait_for_timeout(500)
@@ -826,7 +844,7 @@ class PythonBot(tk.Tk):
             except ImportError:
                 emit('Thiếu Playwright: py -m pip install playwright')
             except Exception as exc:
-                emit('Chrome AutoCart không hoạt động: ' + str(exc)[:200])
+                emit('Lỗi AutoCart: ' + str(exc)[:210])
         threading.Thread(target=work, daemon=True).start()
 
     def page_discord(self):
