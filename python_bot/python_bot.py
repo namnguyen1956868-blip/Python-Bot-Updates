@@ -1,4 +1,4 @@
-"""Python Bot v1.4.0 - desktop website monitor (standard library only)."""
+"""Python Bot v1.5.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.4.0'
+VERSION = '1.5.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -714,7 +714,7 @@ class PythonBot(tk.Tk):
                        selectcolor='#333741').pack(anchor='w', pady=7)
         self.button(q, 'Lưu phương thức thanh toán', self.ks_save_payment, True).pack(anchor='w', pady=5)
         self.label(q, 'Mã SKU sản phẩm thử: 4562112582837 | Số lượng mặc định: 1', 10, MUTED).pack(anchor='w', pady=5)
-        self.button(q, 'CHẠY – AutoCart KS Denki', self.ks_prepare_purchase, True).pack(anchor='w', pady=7)
+        self.button(q, 'CHẠY – AutoCart + Daibiki', self.ks_prepare_purchase, True).pack(anchor='w', pady=7)
         self.button(q, 'Mở sản phẩm bằng Chrome đã đăng nhập', self.ks_open_product).pack(anchor='w', pady=5)
         self.button(q, 'Hướng dẫn checkout Daibiki', self.ks_daibiki_guide).pack(anchor='w', pady=5)
         self.label(q, 'Daibiki chỉ có nếu trang thanh toán cho phép đối với sản phẩm này. Kiểm tra phí và tổng tiền trước khi tự nhấn nút xác nhận đơn hàng.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=6)
@@ -966,7 +966,43 @@ class PythonBot(tk.Tk):
                                 emit('Đã bấm thêm giỏ một lần; chưa xác nhận sản phẩm có trong giỏ.')
                             except PWError as exc:
                                 emit('Không bấm được thêm giỏ: ' + str(exc)[:150])
-                        emit('Trình duyệt giữ mở để kiểm tra giỏ và Daibiki; bot không tự xác nhận đơn.')
+                        # Continue only if the cart navigation is visibly available.
+                        if self.data.get('ksdenki_daibiki', False) and btn is not None:
+                            emit('Đang tìm đường đến checkout để chọn 代金引換...')
+                            cart_link = page.get_by_role('link', name=re.compile('カート', re.I))
+                            try:
+                                if cart_link.count() and cart_link.first.is_visible(timeout=2000):
+                                    cart_link.first.click(timeout=4500)
+                                    emit('Đã mở giỏ hàng. Đang tìm nút tiến hành thanh toán...')
+                                else:
+                                    emit('Không tìm được link giỏ hàng. Chọn Daibiki thủ công khi tới checkout.')
+                            except PWError as exc:
+                                emit('Không thể mở giỏ tự động: ' + str(exc)[:110])
+                            # Do not click purchase submission; only navigate to a payment form.
+                            for phrase in ('ご購入手続き', '注文手続きへ', 'レジに進む', '購入手続きへ'):
+                                try:
+                                    step = page.get_by_text(phrase, exact=False).first
+                                    if step.is_visible(timeout=900) and step.is_enabled(timeout=900):
+                                        step.click(timeout=3500)
+                                        emit('Đã tới bước thủ tục mua hàng: ' + phrase)
+                                        break
+                                except PWError:
+                                    continue
+                            try:
+                                payment = page.get_by_text('代金引換', exact=True).first
+                                if payment.is_visible(timeout=3000):
+                                    candidate = page.get_by_role('radio', name=re.compile('代金引換'))
+                                    if candidate.count() and candidate.first.is_visible(timeout=1000):
+                                        candidate.first.check(timeout=3000)
+                                        emit('Đã chọn phương thức 代金引換 trên website.')
+                                    else:
+                                        emit('Đã thấy Daibiki nhưng chưa xác định được nút chọn. Hãy chọn thủ công.')
+                                else:
+                                    emit('Daibiki chưa hiện trên trang hiện tại; có thể cần đăng nhập, địa chỉ hoặc sang bước tiếp.')
+                            except PWError as exc:
+                                emit('Chưa thể chọn Daibiki tự động: ' + str(exc)[:110])
+                        emit('Kiểm tra sản phẩm, địa chỉ, phí Daibiki và tổng tiền trên Chrome.')
+                        emit('Nút 上記の内容で注文する tạo đơn thật: chỉ bạn xác nhận và bấm nút cuối.')
                         while context.pages:
                             try:
                                 page.wait_for_timeout(500)
