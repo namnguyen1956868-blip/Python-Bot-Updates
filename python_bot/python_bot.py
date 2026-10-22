@@ -1,4 +1,4 @@
-"""Python Bot v1.6.1 - desktop website monitor (standard library only)."""
+"""Python Bot v1.6.2 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.6.1'
+VERSION = '1.6.2'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -950,7 +950,21 @@ class PythonBot(tk.Tk):
                         try:
                             response = page.goto(url, wait_until='commit', timeout=20000)
                         except PWError as exc:
-                            emit('Không tải được trang sản phẩm: ' + str(exc)[:180])
+                            detail = str(exc)
+                            emit('Không tải được trang sản phẩm: ' + detail[:180])
+                            if 'ERR_HTTP2_PROTOCOL_ERROR' in detail:
+                                emit('Chrome Playwright lỗi HTTP/2, trong khi Chrome bình thường hoạt động. Dừng AutoCart để tránh thao tác trên trang lỗi.')
+                                emit('Mở URL bằng Chrome mặc định để tiếp tục thủ công. KHÔNG tự gửi đơn.')
+                                webbrowser.open(url)
+                            return
+                        try:
+                            page.locator('body').wait_for(state='visible', timeout=7000)
+                            if 'ERR_HTTP2_PROTOCOL_ERROR' in page.title():
+                                emit('Trang trình duyệt báo ERR_HTTP2_PROTOCOL_ERROR. AutoCart dừng.')
+                                webbrowser.open(url)
+                                return
+                        except PWError:
+                            emit('Không đọc được nội dung trang sau khi điều hướng. Không thực hiện checkout.')
                             return
                         if response and response.status >= 400:
                             emit('KS Denki phản hồi HTTP ' + str(response.status))
