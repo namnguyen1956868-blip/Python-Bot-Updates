@@ -46,6 +46,7 @@ jobs:
               raise SystemExit(f"Version mismatch: requested {expected}, source {found.group(1) if found else 'missing'}")
           print(f"Verified source version: {expected}")
           PY
+          python -m py_compile python_bot/python_bot.py python_bot/update_manager.py python_bot/apply_update.py python_bot/discord_listener.py
 
       - name: Package Python Bot
         run: |
