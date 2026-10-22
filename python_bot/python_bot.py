@@ -1,4 +1,4 @@
-"""Python Bot v0.6.0 - desktop website monitor (standard library only)."""
+"""Python Bot v0.7.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.6.0'
+VERSION = '0.7.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -127,7 +127,7 @@ class PythonBot(tk.Tk):
                  font=('Segoe UI', 18, 'bold'), pady=23).pack(fill='x')
         tk.Label(self.sidebar, text='ĐIỀU KHIỂN', fg=MUTED, bg=SIDEBAR,
                  font=('Segoe UI', 9)).pack(anchor='w', padx=20, pady=(16, 8))
-        for name in ('Tổng quan', 'Giám sát', 'Tác vụ', 'Hồ sơ', 'Proxy', 'Discord', 'JAN/EAN', 'Cài đặt'):
+        for name in ('Tổng quan', 'Giám sát', 'Tác vụ', 'Hồ sơ', 'Proxy', 'Discord', 'JAN/EAN', 'Yamada Guest', 'Cài đặt'):
             b = tk.Button(self.sidebar, text='   '+name, anchor='w', bg=SIDEBAR, fg=FG,
                           activebackground=PANEL, activeforeground=ACCENT, relief='flat',
                           font=('Segoe UI', 11), padx=14, pady=13,
@@ -163,7 +163,7 @@ class PythonBot(tk.Tk):
             btn.configure(bg=PANEL if title == name else SIDEBAR,
                           fg=ACCENT if title == name else FG)
         getattr(self, 'page_' + {'Tổng quan':'overview','Giám sát':'monitor',
-                'Tác vụ':'tasks','Hồ sơ':'profiles','Proxy':'proxy','Discord':'discord','JAN/EAN':'jan','Cài đặt':'settings'}[name])()
+                'Tác vụ':'tasks','Hồ sơ':'profiles','Proxy':'proxy','Discord':'discord','JAN/EAN':'jan','Yamada Guest':'yamada_guest','Cài đặt':'settings'}[name])()
 
     def page_overview(self):
         self.heading('Tổng quan', 'Trung tâm điều khiển Python Bot')
@@ -332,6 +332,9 @@ class PythonBot(tk.Tk):
                             self.update_msg.configure(text='Tải thất bại: ' + event[2])
                     elif event[1]:
                         self.apply_downloaded_update(event[1])
+                elif event[0] == 'yamada_status':
+                    if self.active_page == 'Yamada Guest' and hasattr(self, 'yamada_status'):
+                        self.yamada_status.configure(text=event[1])
                 elif event[0] == 'discord_signal':
                     content = event[2] if len(event) > 2 else ''
                     self.handle_notification(content, 'Discord Bot')
@@ -415,6 +418,80 @@ class PythonBot(tk.Tk):
 
     def test_jan(self):
         self.handle_notification(self.jan_text.get('1.0', 'end'), 'Dán thử')
+
+    def page_yamada_guest(self):
+        self.heading('Yamada Guest - thử riêng', 'Thử thêm sản phẩm vào giỏ với trình duyệt khách; không đăng nhập, không đặt hàng hoặc thanh toán.')
+        p = self.panel()
+        self.label(p, 'Link sản phẩm Yamada Webcom:', 11, bold=True).pack(anchor='w', pady=(0,7))
+        self.yamada_url = self.entry(p, 85)
+        self.yamada_url.insert(0, self.data.get('yamada_guest_url', ''))
+        self.yamada_url.pack(anchor='w', pady=6)
+        self.label(p, 'Chế độ thử an toàn: mở trang và thử thêm giỏ; luôn dừng trước xác nhận đơn hàng.', 10, MUTED, wraplength=740).pack(anchor='w', pady=7)
+        row = tk.Frame(p, bg=PANEL)
+        row.pack(anchor='w', pady=10)
+        self.button(row, 'Mở trang Guest', self.yamada_open_guest, True).pack(side='left', padx=(0,8))
+        self.button(row, 'Thử AutoCart (Chrome)', self.yamada_autocart_test).pack(side='left')
+        self.yamada_status = self.label(p, 'Chưa chạy thử.', 11, MUTED, wraplength=750, justify='left')
+        self.yamada_status.pack(anchor='w', pady=10)
+        self.label(p, 'AutoCart cần Playwright: py -m pip install playwright. Chrome phải được cài. CAPTCHA và checkout đều để thao tác thủ công.', 10, MUTED, wraplength=750, justify='left').pack(anchor='w', pady=5)
+
+    def yamada_validate_url(self):
+        url = self.yamada_url.get().strip()
+        parsed = urlparse(url)
+        host = (parsed.hostname or '').lower()
+        if parsed.scheme != 'https' or host not in ('www.yamada-denkiweb.com','yamada-denkiweb.com'):
+            messagebox.showerror('Yamada Guest', 'Chỉ chấp nhận URL HTTPS của www.yamada-denkiweb.com')
+            return None
+        self.data['yamada_guest_url'] = url
+        save_data(self.data)
+        return url
+
+    def yamada_open_guest(self):
+        url = self.yamada_validate_url()
+        if not url:
+            return
+        webbrowser.open(url)
+        self.yamada_status.configure(text='Đã mở trang sản phẩm. Hãy dùng lựa chọn ゲスト購入 khi trang cho phép.')
+
+    def yamada_autocart_test(self):
+        url = self.yamada_validate_url()
+        if not url:
+            return
+        self.yamada_status.configure(text='Đang mở Chrome Guest và thử tìm nút thêm vào giỏ...')
+        def work():
+            try:
+                from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(channel='chrome', headless=False)
+                    context = browser.new_context()
+                    page = context.new_page()
+                    page.goto(url, wait_until='domcontentloaded', timeout=30000)
+                    page.wait_for_timeout(1600)
+                    buttons = [
+                        page.get_by_role('button', name=re.compile('カートに入れる|カートへ入れる|カートに追加')),
+                        page.get_by_role('link', name=re.compile('カートに入れる|カートへ入れる|カートに追加')),
+                        page.locator('input[type=submit][value*="カート"]')
+                    ]
+                    clicked = False
+                    for candidate in buttons:
+                        try:
+                            if candidate.count() and candidate.first.is_visible() and candidate.first.is_enabled():
+                                candidate.first.click(timeout=3500)
+                                clicked = True
+                                break
+                        except PlaywrightTimeout:
+                            pass
+                    status = ('Đã thử nhấn thêm vào giỏ. Xác minh giỏ trên Chrome; không tự checkout.'
+                              if clicked else 'Không tìm thấy nút AutoCart phù hợp hoặc trang yêu cầu thao tác thủ công.')
+                    self.events.put(('yamada_status',status))
+                    # Keep Chrome open while the user verifies the cart. No payment action.
+                    page.wait_for_timeout(20000)
+                    browser.close()
+            except ImportError:
+                self.events.put(('yamada_status', 'Chưa có Playwright. Chạy: py -m pip install playwright'))
+            except Exception as exc:
+                self.events.put(('yamada_status', 'Thử Yamada thất bại: ' + str(exc)[:160]))
+        threading.Thread(target=work, daemon=True).start()
 
     def page_discord(self):
         self.heading('Discord', 'Tự thêm và giám sát liên kết nhận từ kênh Discord được cấp quyền')
