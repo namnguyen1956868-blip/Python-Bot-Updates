@@ -1,4 +1,4 @@
-"""Python Bot v0.9.17 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.18 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.17'
+VERSION = '0.9.18'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -782,18 +782,14 @@ class PythonBot(tk.Tk):
                     try:
                         context = browser.new_context(locale='ja-JP')
                         page = context.new_page()
-                        # Defer nonessential resources; retain scripts, CSS, images and checkout services.
-                        def quick_route(route):
-                            request = route.request
-                            if request.resource_type in ('font', 'media'):
-                                route.abort()
-                            else:
-                                route.continue_()
-                        page.route('**/*', quick_route)
-                        emit('Chế độ tải nhanh: chỉ bỏ font/video; giữ ảnh, CSS, JavaScript.')
+                        # Avoid intercepting every network request, which can slow pages.
+                        import time as _timer
+                        load_started = _timer.perf_counter()
+                        emit('Đo tốc độ: bắt đầu tải trang (không chặn tài nguyên).')
                         emit('Đã mở Chromium (Playwright); đang tải trang sản phẩm...')
                         try:
                             page.goto(url, wait_until='commit', timeout=12000)
+                            emit('Phản hồi đầu tiên sau %.1f giây.' % (_timer.perf_counter() - load_started))
                         except PWTimeout:
                             # Some sites display their document before navigation completes.
                             emit('Yamada phản hồi chậm; kiểm tra trực tiếp nội dung đang hiện...')
@@ -804,6 +800,7 @@ class PythonBot(tk.Tk):
                         except PWError:
                             emit('Chưa có nội dung trang sau khi tải. Không bấm nút.')
                             return
+                        emit('Nội dung trang sẵn sàng sau %.1f giây.' % (_timer.perf_counter() - load_started))
                         host = (urlparse(page.url).hostname or '').lower()
                         if host not in ('www.yamada-denkiweb.com', 'yamada-denkiweb.com'):
                             emit('Trang chuyển miền khác. Dừng để kiểm tra.')
