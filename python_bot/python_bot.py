@@ -1,4 +1,4 @@
-"""Python Bot v0.7.0 - desktop website monitor (standard library only)."""
+"""Python Bot v0.7.1 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.7.0'
+VERSION = '0.7.1'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -196,7 +196,7 @@ class PythonBot(tk.Tk):
         self.keyword_entry.grid(row=1, column=2, pady=8, sticky='ew')
         self.button(form, '+ Thêm tác vụ', self.add_task, True).grid(row=2, column=0, sticky='w', pady=8)
         self.button(form, 'Kiểm tra một lượt', self.run_once).grid(row=2, column=1, sticky='w', pady=8)
-        self.label(form, 'JAN/EAN của sản phẩm (8, 13 hoặc 14 số):', 10, MUTED).grid(row=3, column=0, columnspan=2, sticky='w', pady=(9,3))
+        self.label(form, 'JAN/EAN (tùy chọn; cần có để khớp thông báo Discord):', 10, MUTED).grid(row=3, column=0, columnspan=2, sticky='w', pady=(9,3))
         self.jan_entry = self.entry(form, 24)
         self.jan_entry.grid(row=4, column=0, sticky='w', pady=4)
         form.columnconfigure(1, weight=1)
@@ -237,8 +237,8 @@ class PythonBot(tk.Tk):
     def add_task(self):
         name, url, keyword = self.name_entry.get().strip(), self.url_entry.get().strip(), self.keyword_entry.get().strip()
         jan = self.jan_entry.get().strip()
-        if not re.fullmatch(r'(?:[0-9]{8}|[0-9]{13}|[0-9]{14})', jan or ''):
-            messagebox.showerror('JAN/EAN', 'Cần nhập đúng mã JAN/EAN gồm 8, 13 hoặc 14 chữ số.')
+        if jan and not re.fullmatch(r'(?:[0-9]{8}|[0-9]{13}|[0-9]{14})', jan):
+            messagebox.showerror('JAN/EAN', 'JAN/EAN không bắt buộc. Nếu nhập, dùng 8, 13 hoặc 14 chữ số.')
             return
         parsed = urlparse(url)
         if not name or parsed.scheme not in ('https','http') or not parsed.hostname:
