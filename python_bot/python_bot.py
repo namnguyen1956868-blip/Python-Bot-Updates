@@ -1,4 +1,4 @@
-"""Python Bot v0.9.7 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.8 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.7'
+VERSION = '0.9.8'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -726,6 +726,7 @@ class PythonBot(tk.Tk):
         row.pack(anchor='w', pady=10)
         self.button(row, 'Mở trang Guest (Chrome)', self.yamada_open_guest, True).pack(side='left', padx=(0,8))
         self.button(row, 'Thử AutoCart ẩn', self.yamada_autocart_test).pack(side='left')
+        self.button(row, 'Mở trong trình duyệt thật', self.yamada_open_guest).pack(side='left', padx=(8,0))
         self.yamada_status = self.label(p, 'Chưa chạy thử.', 11, MUTED, wraplength=750, justify='left')
         self.yamada_status.pack(anchor='w', pady=10)
         self.label(p, 'AutoCart ẩn cần Playwright và Chrome. Trình duyệt ẩn không thể hiện riêng cửa sổ 3DS mà giữ nguyên phiên giao dịch; mở Chrome thường để tiếp tục thanh toán và xác thực.', 10, MUTED, wraplength=750, justify='left').pack(anchor='w', pady=5)
@@ -828,7 +829,7 @@ class PythonBot(tk.Tk):
                                  else 'Không tìm thấy nút thêm giỏ khả dụng. Hãy kiểm tra trang bằng Chrome thường.')
                             return
                         except PWTimeout:
-                            emit('Yamada chưa phản hồi trong 30 giây (ngay cả khi chờ commit). Dừng; kiểm tra Chrome thường, proxy và kết nối mạng.')
+                            emit('Chrome ẩn timeout ở bước kết nối. Không tự thử lặp nữa. Bấm Mở trong trình duyệt thật để kiểm tra; nếu vẫn lỗi hãy kiểm tra VPN/proxy và mạng.')
                             return
                         except Exception as exc:
                             emit('Lỗi Chrome ẩn: ' + str(exc)[:200])
