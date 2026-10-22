@@ -1,4 +1,4 @@
-"""Python Bot v0.9.20 - desktop website monitor (standard library only)."""
+"""Python Bot v1.0.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.20'
+VERSION = '1.0.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -131,7 +131,7 @@ class PythonBot(tk.Tk):
                  font=('Segoe UI', 18, 'bold'), pady=23).pack(fill='x')
         tk.Label(self.sidebar, text='ĐIỀU KHIỂN', fg=MUTED, bg=SIDEBAR,
                  font=('Segoe UI', 9)).pack(anchor='w', padx=20, pady=(16, 8))
-        for name in ('Tổng quan', 'Giám sát', 'Tác vụ', 'Hồ sơ', 'Proxy', 'Discord', 'JAN/EAN', 'Yamada Guest', 'Thẻ', 'Gmail OTP', 'Cài đặt'):
+        for name in ('Tổng quan', 'Giám sát', 'Tác vụ', 'Hồ sơ', 'Proxy', 'Discord', 'JAN/EAN', 'KS Denki', 'Thẻ', 'Gmail OTP', 'Cài đặt'):
             b = tk.Button(self.sidebar, text='   '+name, anchor='w', bg=SIDEBAR, fg=FG,
                           activebackground=PANEL, activeforeground=ACCENT, relief='flat',
                           font=('Segoe UI', 11), padx=14, pady=13,
@@ -167,7 +167,7 @@ class PythonBot(tk.Tk):
             btn.configure(bg=PANEL if title == name else SIDEBAR,
                           fg=ACCENT if title == name else FG)
         getattr(self, 'page_' + {'Tổng quan':'overview','Giám sát':'monitor',
-                'Tác vụ':'tasks','Hồ sơ':'profiles','Proxy':'proxy','Discord':'discord','JAN/EAN':'jan','Yamada Guest':'yamada_guest','Thẻ':'cards','Gmail OTP':'gmail_otp','Cài đặt':'settings'}[name])()
+                'Tác vụ':'tasks','Hồ sơ':'profiles','Proxy':'proxy','Discord':'discord','JAN/EAN':'jan','KS Denki':'ksdenki','Thẻ':'cards','Gmail OTP':'gmail_otp','Cài đặt':'settings'}[name])()
 
     def page_overview(self):
         self.heading('Tổng quan', 'Trung tâm điều khiển Python Bot')
@@ -693,208 +693,49 @@ class PythonBot(tk.Tk):
     def test_jan(self):
         self.handle_notification(self.jan_text.get('1.0', 'end'), 'Dán thử')
 
-    def page_yamada_guest(self):
-        self.heading('Yamada Guest - thử riêng', 'Chạy ẩn khi kiểm tra và thử thêm giỏ; thanh toán và 3D Secure cần mở Chrome để xác nhận.')
+    def page_ksdenki(self):
+        self.heading('KS Denki - tài khoản', 'Dùng tài khoản KS Denki Online Shop trên Chrome thông thường; giữ phiên đăng nhập trong Chrome.')
         p = self.panel()
-        self.label(p, 'Link sản phẩm Yamada Webcom:', 11, bold=True).pack(anchor='w', pady=(0,7))
-        self.yamada_url = self.entry(p, 85)
-        self.yamada_url.insert(0, self.data.get('yamada_guest_url', ''))
-        self.yamada_url.pack(anchor='w', pady=6)
-        self.label(p, 'Hồ sơ giao hàng (chọn để quản lý, chưa tự điền website):', 10, MUTED).pack(anchor='w', pady=(12,4))
-        self.yamada_profile = ttk.Combobox(p, state='readonly', width=40,
-            values=['Chưa chọn'] + [str(v.get('label','')) for v in self.profile_records()])
-        self.yamada_profile.current(0)
-        self.yamada_profile.pack(anchor='w', pady=4)
-        self.label(p, 'Chế độ thử an toàn: mở trang và thử thêm giỏ; luôn dừng trước xác nhận đơn hàng.', 10, MUTED, wraplength=740).pack(anchor='w', pady=7)
-        row = tk.Frame(p, bg=PANEL)
-        row.pack(anchor='w', pady=10)
-        self.button(row, 'Mở trang Guest (Chrome)', self.yamada_open_guest, True).pack(side='left', padx=(0,8))
-        self.button(row, 'AutoCart Chrome Headless', self.yamada_autocart_test).pack(side='left')
-        self.button(row, 'Mở trong trình duyệt thật', self.yamada_open_guest).pack(side='left', padx=(8,0))
-        self.yamada_status = self.label(p, 'Chưa chạy thử.', 11, MUTED, wraplength=750, justify='left')
-        self.yamada_status.pack(anchor='w', pady=10)
-        self.label(p, 'AutoCart thử Google Chrome Headless (không hiện cửa sổ), chỉ thêm giỏ và ghi nhật ký. Chrome thường dùng để kiểm tra hoặc tự xác nhận checkout/3DS.', 10, MUTED, wraplength=750, justify='left').pack(anchor='w', pady=5)
+        self.label(p, 'Trang đăng nhập chính thức:', 11, bold=True).pack(anchor='w', pady=5)
+        self.label(p, 'https://www.ksdenki.com/shop/customer/login.aspx', 10, MUTED).pack(anchor='w', pady=4)
+        self.button(p, 'Mở đăng nhập KS Denki', self.ks_open_login, True).pack(anchor='w', pady=6)
+        self.label(p, 'Đăng nhập bằng tài khoản của bạn trong Chrome. Python Bot không đọc hoặc lưu mật khẩu và không tự xử lý CAPTCHA.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=7)
+        q = self.panel()
+        self.label(q, 'Link sản phẩm KS Denki:', 11, bold=True).pack(anchor='w', pady=(0,7))
+        self.ks_product_url = self.entry(q, 82)
+        self.ks_product_url.insert(0, self.data.get('ksdenki_product_url', ''))
+        self.ks_product_url.pack(anchor='w', pady=5)
+        self.button(q, 'Mở sản phẩm bằng Chrome đã đăng nhập', self.ks_open_product, True).pack(anchor='w', pady=7)
+        self.label(q, 'Thao tác giỏ hàng và checkout hiện thực hiện trên website. Không lưu thẻ/CVV hoặc tự xác nhận đơn hàng.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=5)
         history = self.panel()
-        self.label(history, 'NHẬT KÝ YAMADA GUEST', 12, bold=True).pack(anchor='w', pady=(0,7))
-        self.yamada_log = tk.Text(history, height=7, bg='#0b0d12', fg='#cbd4e1', insertbackground='white',
-                                  font=('Consolas', 10), state='disabled', wrap='word', relief='flat')
-        self.yamada_log.pack(fill='both', expand=True)
-        self.yamada_log_event('Sẵn sàng. Chưa thực hiện giao dịch.')
-        self.label(history, 'Không hiển thị, lưu hoặc ghi nhật ký số thẻ, CVV và OTP.', 10, MUTED).pack(anchor='w', pady=5)
-        sec = self.panel()
-        self.label(sec, 'THẺ TRONG PHIÊN (KHÔNG LƯU VÀO FILE)', 12, bold=True).pack(anchor='w', pady=(0,7))
-        self.label(sec, 'Số thẻ', 10, MUTED).pack(anchor='w')
-        pan_entry = self.entry(sec, 40)
-        pan_entry.config(show='●', textvariable=self.session_card_pan)
-        pan_entry.pack(anchor='w', pady=3)
-        self.label(sec, 'Hết hạn (MM/YY)', 10, MUTED).pack(anchor='w')
-        expiry_entry = self.entry(sec, 12)
-        expiry_entry.config(textvariable=self.session_card_exp)
-        expiry_entry.pack(anchor='w', pady=3)
-        self.label(sec, 'CVV/CVC', 10, MUTED).pack(anchor='w')
-        cvv_entry = self.entry(sec, 12)
-        cvv_entry.config(show='●', textvariable=self.session_card_cvv)
-        cvv_entry.pack(anchor='w', pady=3)
-        self.button(sec, 'Xóa dữ liệu thẻ trong phiên', self.clear_test_card).pack(anchor='w', pady=7)
-        self.label(sec, 'Các ô này chỉ dùng để chuẩn bị và kiểm tra nhập liệu. Phiên bản này chưa tự chuyển số thẻ hoặc CVV vào checkout Yamada, chưa tự đặt hàng.', 10, MUTED, wraplength=730, justify='left').pack(anchor='w', pady=5)
+        self.label(history, 'NHẬT KÝ KS DENKI', 12, bold=True).pack(anchor='w', pady=(0,7))
+        self.ks_log = tk.Text(history, height=9, bg='#0b0d12', fg='#cbd4e1',
+                              font=('Consolas',10), state='disabled', wrap='word', relief='flat')
+        self.ks_log.pack(fill='both', expand=True)
+        self.ks_log_event('Sẵn sàng. Đăng nhập KS Denki trên Chrome để bắt đầu.')
 
+    def ks_log_event(self, detail):
+        if hasattr(self, 'ks_log') and self.ks_log.winfo_exists():
+            self.ks_log.configure(state='normal')
+            self.ks_log.insert('end', '[' + datetime.now().strftime('%H:%M:%S') + '] ' + detail + '\\n')
+            self.ks_log.see('end')
+            self.ks_log.configure(state='disabled')
 
-    def yamada_log_event(self, detail):
-        if hasattr(self, 'yamada_log') and self.yamada_log.winfo_exists():
-            self.yamada_log.config(state='normal')
-            self.yamada_log.insert('end', '[' + datetime.now().strftime('%H:%M:%S') + '] ' + detail + '\n')
-            self.yamada_log.see('end')
-            self.yamada_log.config(state='disabled')
+    def ks_open_login(self):
+        webbrowser.open('https://www.ksdenki.com/shop/customer/login.aspx')
+        self.ks_log_event('Đã mở trang đăng nhập trong trình duyệt mặc định. Đăng nhập thủ công.')
 
-
-    def yamada_validate_url(self):
-        url = self.yamada_url.get().strip()
+    def ks_open_product(self):
+        url = self.ks_product_url.get().strip()
         parsed = urlparse(url)
         host = (parsed.hostname or '').lower()
-        if parsed.scheme != 'https' or host not in ('www.yamada-denkiweb.com','yamada-denkiweb.com'):
-            messagebox.showerror('Yamada Guest', 'Chỉ chấp nhận URL HTTPS của www.yamada-denkiweb.com')
-            return None
-        self.data['yamada_guest_url'] = url
+        if parsed.scheme != 'https' or host not in ('ksdenki.com','www.ksdenki.com'):
+            messagebox.showerror('KS Denki', 'Chỉ chấp nhận URL HTTPS của www.ksdenki.com.')
+            return
+        self.data['ksdenki_product_url'] = url
         save_data(self.data)
-        return url
-
-    def yamada_open_guest(self):
-        url = self.yamada_validate_url()
-        if not url:
-            return
         webbrowser.open(url)
-        self.yamada_log_event('Đã mở trang sản phẩm bằng trình duyệt mặc định.')
-        self.yamada_status.configure(text='Đã mở trang trong trình duyệt mặc định. Nếu Chrome là mặc định và đã lưu thẻ, Chrome có thể đề xuất Autofill ở bước thanh toán. Bạn tự xác nhận CVV/3DS.')
-
-    def yamada_autocart_test(self):
-        url = self.yamada_validate_url()
-        if not url:
-            return
-        self.yamada_status.configure(text='Đang mở sản phẩm Yamada để thêm vào giỏ thật...')
-        self.yamada_log_event('Bắt đầu AutoCart thật (chỉ thêm giỏ, không đặt hàng).')
-        def emit(msg):
-            self.events.put(('yamada_status', msg))
-        def work():
-            try:
-                from playwright.sync_api import sync_playwright, Error as PWError, TimeoutError as PWTimeout
-                with sync_playwright() as p:
-                    browser = p.chromium.launch(channel='chrome', headless=True, timeout=20000)
-                    try:
-                        context = browser.new_context(locale='ja-JP')
-                        page = context.new_page()
-                        # Avoid intercepting every network request, which can slow pages.
-                        import time as _timer
-                        load_started = _timer.perf_counter()
-                        emit('Đo tốc độ: bắt đầu tải trang (không chặn tài nguyên).')
-                        emit('Đã mở Google Chrome Headless; đang tải trang sản phẩm...')
-                        try:
-                            page.goto(url, wait_until='commit', timeout=12000)
-                            emit('Phản hồi đầu tiên sau %.1f giây.' % (_timer.perf_counter() - load_started))
-                        except PWTimeout as exc:
-                            emit('Yamada Headless timeout trước phản hồi HTTP; không thử thêm giỏ. ' + str(exc)[:95])
-                            return
-                        except PWError as exc:
-                            emit('Yamada Headless bị lỗi điều hướng: ' + str(exc)[:175])
-                            emit('Đã dừng an toàn. Dùng Mở trong trình duyệt thật để kiểm tra, không tự gửi checkout.')
-                            return
-                        actual_url = page.url
-                        host = (urlparse(actual_url).hostname or '').lower()
-                        if actual_url.startswith(('about:', 'chrome-error:')) or host not in ('www.yamada-denkiweb.com', 'yamada-denkiweb.com'):
-                            emit('Trang không hợp lệ sau điều hướng: ' + actual_url[:150] + '. Không thực hiện AutoCart.')
-                            return
-                        try:
-                            page.locator('body').wait_for(state='visible', timeout=10000)
-                        except PWError:
-                            emit('Chưa có nội dung trang sau khi tải. Không bấm nút.')
-                            return
-                        emit('Nội dung trang sẵn sàng sau %.1f giây.' % (_timer.perf_counter() - load_started))
-                        host = (urlparse(page.url).hostname or '').lower()
-                        if host not in ('www.yamada-denkiweb.com', 'yamada-denkiweb.com'):
-                            emit('Trang chuyển miền khác. Dừng để kiểm tra.')
-                            return
-                        # Cookie notice on this storefront may use a non-button element.
-                        # Confirm it disappeared before trying the cart button.
-                        try:
-                            ok_options = [
-                                page.get_by_role('button', name='OK', exact=True),
-                                page.get_by_text('OK', exact=True),
-                                page.locator('input[value="OK"]')
-                            ]
-                            for cookie_ok in ok_options:
-                                if cookie_ok.count() and cookie_ok.first.is_visible(timeout=1500):
-                                    emit('Có nút OK của thông báo Cookie; đang xác nhận...')
-                                    cookie_ok.first.click(timeout=4500)
-                                    page.wait_for_timeout(450)
-                                    break
-                            visible_ok = page.get_by_text('OK', exact=True)
-                            if visible_ok.count() and visible_ok.first.is_visible(timeout=1200):
-                                emit('Bảng Cookie vẫn hiển thị. Hãy bấm OK thủ công; bot dừng trước thêm giỏ.')
-                                return
-                        except PWError as exc:
-                            emit('Chưa xử lý được thông báo Cookie: ' + str(exc)[:120])
-                            return
-                        emit('Đã nhận nội dung. Đang tìm nút カートに入れる...')
-                        options = [
-                            page.get_by_role('button', name='カートに入れる'),
-                            page.get_by_role('link', name='カートに入れる'),
-                            page.get_by_text('カートに入れる', exact=True),
-                            page.locator('input[type="submit"][value*="カート"]')
-                        ]
-                        chosen = None
-                        for option in options:
-                            try:
-                                if option.count() and option.first.is_visible(timeout=1500) and option.first.is_enabled(timeout=1500):
-                                    chosen = option.first
-                                    break
-                            except PWError:
-                                continue
-                        if chosen is None:
-                            emit('Không thấy nút カートに入れる đang hoạt động. Chưa thêm giỏ.')
-                            return
-                        try:
-                            chosen.click(timeout=8000)
-                        except PWError as exc:
-                            emit('Không bấm được nút thêm giỏ: ' + str(exc)[:145])
-                            return
-                        emit('Đã gửi thao tác bấm. Đang chờ trang xác nhận thêm giỏ (không bấm lại)...')
-                        try:
-                            page.wait_for_timeout(1800)
-                            current = page.url
-                            cart_text = ''
-                            # Report a narrow, non-sensitive view of the cart counter.
-                            for locator in (
-                                page.locator('header a[href*="cart"]'),
-                                page.get_by_role('link', name=re.compile('カート')),
-                                page.locator('[class*="cart"]')
-                            ):
-                                try:
-                                    if locator.count():
-                                        cart_text = locator.first.inner_text(timeout=1200).strip()[:80]
-                                        if cart_text:
-                                            break
-                                except PWError:
-                                    continue
-                            emit('URL sau thao tác: ' + current[:150])
-                            emit('Nội dung chỉ báo giỏ: ' + (cart_text or '(không đọc được)'))
-                            if current != url and ('cart' in current.lower() or 'basket' in current.lower()):
-                                emit('Đã chuyển đến trang giỏ. Kiểm tra sản phẩm và số lượng.')
-                            else:
-                                emit('Chưa có bằng chứng thêm giỏ thành công. Không tự nhấn lại; kiểm tra biểu tượng giỏ và thông báo Yamada.')
-                        except PWError as exc:
-                            emit('Lỗi xác minh giỏ: ' + str(exc)[:145])
-                        emit('Đã hoàn tất phép thử Chrome Headless. Mở Chrome thường nếu muốn kiểm tra hoặc thanh toán.')
-                        while not page.is_closed():
-                            try:
-                                page.wait_for_timeout(500)
-                            except PWError:
-                                break
-                    finally:
-                        browser.close()
-            except ImportError:
-                emit('Thiếu Playwright: py -m pip install playwright')
-            except Exception as exc:
-                emit('Lỗi AutoCart Chrome Headless: ' + str(exc)[:160] + ' | Nếu thiếu trình duyệt, chạy: py -m playwright install chromium')
-        threading.Thread(target=work, daemon=True).start()
+        self.ks_log_event('Đã mở sản phẩm KS Denki trên trình duyệt mặc định; sử dụng tài khoản đã đăng nhập.')
 
     def page_discord(self):
         self.heading('Discord', 'Tự thêm và giám sát liên kết nhận từ kênh Discord được cấp quyền')
