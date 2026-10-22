@@ -1,4 +1,4 @@
-"""Python Bot v1.3.4 - desktop website monitor (standard library only)."""
+"""Python Bot v1.4.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.3.4'
+VERSION = '1.4.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -97,6 +97,7 @@ class PythonBot(tk.Tk):
         self.worker = None
         self.latest_release = None
         self.update_busy = False
+        self.ks_run_lock = threading.Lock()
         self.discord_listener = None
         self.discord_state = 'Chưa kết nối'
         self.active_page = 'Giám sát'
@@ -828,10 +829,11 @@ class PythonBot(tk.Tk):
                 from playwright.sync_api import sync_playwright, Error as PWError
                 with sync_playwright() as p:
                     self.events.put(('ks_status','Đang khởi động Google Chrome...'))
-                    browser = p.chromium.launch(channel='chrome', headless=False, timeout=15000)
+                    profile_folder = DATA_FILE.parent / 'ksdenki_chrome_profile'
+                    profile_folder.mkdir(parents=True, exist_ok=True)
+                    browser = p.chromium.launch_persistent_context(user_data_dir=str(profile_folder), channel='chrome', headless=False, locale='ja-JP', timeout=15000)
                     try:
-                        context = browser.new_context(locale='ja-JP')
-                        page = context.new_page()
+                        page = browser.pages[0] if browser.pages else browser.new_page()
                         self.events.put(('ks_status','Chrome đã mở; đang truy cập trang đăng nhập KS Denki...'))
                         try:
                             page.goto('https://www.ksdenki.com/shop/customer/login.aspx', wait_until='commit', timeout=15000)
@@ -910,79 +912,74 @@ class PythonBot(tk.Tk):
         self.ks_log_event('Sử dụng phiên Chrome riêng cho bot; nếu chưa đăng nhập, bạn đăng nhập trong cửa sổ này.')
         def emit(message):
             self.events.put(('ks_status', message))
+        if not self.ks_run_lock.acquire(blocking=False):
+            messagebox.showwarning('KS Denki', 'Một tác vụ Chrome KS Denki đang chạy. Đóng cửa sổ Chrome của bot trước khi chạy lại.')
+            return
         def work():
             try:
                 from playwright.sync_api import sync_playwright, Error as PWError
                 with sync_playwright() as p:
                     profile_folder = DATA_FILE.parent / 'ksdenki_chrome_profile'
                     profile_folder.mkdir(parents=True, exist_ok=True)
-                    emit('Đang khởi động Chrome với hồ sơ KS Denki...')
+                    emit('Đang mở Chrome KS Denki (chung hồ sơ cho đăng nhập và AutoCart)...')
                     try:
                         context = p.chromium.launch_persistent_context(
-                            user_data_dir=str(profile_folder), channel='chrome', headless=False,
-                            locale='ja-JP', timeout=12000)
-                    except PWError as launch_error:
-                        emit('Không mở được Chrome với hồ sơ đã lưu: ' + str(launch_error)[:130])
-                        emit('Có thể hồ sơ Chrome đang được dùng. Đóng cửa sổ Chrome của bot rồi thử lại; không xóa hồ sơ hoặc mật khẩu.')
+                            user_data_dir=str(profile_folder), channel='chrome',
+                            headless=False, locale='ja-JP', timeout=15000)
+                    except PWError as exc:
+                        emit('Không khởi động được hồ sơ Chrome: ' + str(exc)[:170])
+                        emit('Đóng cửa sổ Chrome bot cũ rồi thử lại; hoặc bấm Mở sản phẩm bằng Chrome đã đăng nhập.')
                         return
-                    emit('Đã khởi động Chrome thành công.')
                     try:
                         page = context.pages[0] if context.pages else context.new_page()
-                        emit('Chrome KS Denki đã mở. Đang truy cập sản phẩm...')
+                        emit('Chrome đã khởi động. Đang mở sản phẩm...')
                         try:
                             response = page.goto(url, wait_until='commit', timeout=20000)
                         except PWError as exc:
-                            emit('Không tải được sản phẩm: ' + str(exc)[:160])
+                            emit('Không tải được trang sản phẩm: ' + str(exc)[:180])
                             return
-                        if response is not None and response.status >= 400:
-                            emit('Website trả về HTTP ' + str(response.status) + ', đã dừng.')
+                        if response and response.status >= 400:
+                            emit('KS Denki phản hồi HTTP ' + str(response.status))
                             return
                         if (urlparse(page.url).hostname or '').lower() not in ('ksdenki.com', 'www.ksdenki.com'):
-                            emit('Trang chuyển miền. Không bấm thêm giỏ.')
+                            emit('Trang chuyển sang miền khác. Không bấm nút.')
                             return
-                        emit('Trang sản phẩm đã phản hồi. Đang tìm nút thêm vào giỏ...')
-                        choices = [
+                        emit('Đang chờ nút カートに入れる khả dụng...')
+                        btn = None
+                        for locator in (
                             page.get_by_role('button', name=re.compile('カートに入れる')),
                             page.locator('input[type="submit"][value*="カート"]'),
-                            page.locator('button:has-text("カートに入れる")'),
-                            page.locator('a:has-text("カートに入れる")'),
-                            page.get_by_text('カートに入れる', exact=True)
-                        ]
-                        chosen = None
-                        for control in choices:
+                            page.get_by_text('カートに入れる', exact=True),
+                        ):
                             try:
-                                control.first.wait_for(state='visible', timeout=3500)
-                                if control.first.is_enabled(timeout=1000):
-                                    chosen = control.first
+                                locator.first.wait_for(state='visible', timeout=4000)
+                                if locator.first.is_enabled(timeout=1500):
+                                    btn = locator.first
                                     break
                             except PWError:
                                 continue
-                        if chosen is None:
-                            emit('Không thấy nút カートに入れる khả dụng. Giữ Chrome mở để kiểm tra.')
+                        if btn is None:
+                            emit('Không tìm thấy nút thêm giỏ. Kiểm tra tình trạng đăng nhập và tồn kho.')
                         else:
                             try:
-                                chosen.click(timeout=8000)
-                                emit('Đã bấm カートに入れる một lần. Kiểm tra số giỏ trong Chrome.')
+                                btn.click(timeout=7000)
+                                emit('Đã bấm thêm giỏ một lần; chưa xác nhận sản phẩm có trong giỏ.')
                             except PWError as exc:
-                                emit('Không bấm được thêm giỏ: ' + str(exc)[:140])
-                        page.wait_for_timeout(1400)
-                        emit('Thao tác hoàn tất; chưa xác minh số lượng giỏ. Không bấm lặp lại.')
-                        emit('Nếu KS Denki hỗ trợ Daibiki, chọn 代金引換 khi checkout và kiểm tra tổng phí.')
-                        emit('Bot KHÔNG bấm xác nhận đặt hàng cuối cùng.')
+                                emit('Không bấm được thêm giỏ: ' + str(exc)[:150])
+                        emit('Trình duyệt giữ mở để kiểm tra giỏ và Daibiki; bot không tự xác nhận đơn.')
                         while context.pages:
                             try:
                                 page.wait_for_timeout(500)
                             except PWError:
                                 break
                     finally:
-                        try:
-                            context.close()
-                        except Exception:
-                            pass
+                        context.close()
             except ImportError:
-                emit('Chưa cài Playwright: py -m pip install playwright')
+                emit('Thiếu Playwright: py -m pip install playwright')
             except Exception as exc:
-                emit('AutoCart KS Denki thất bại: ' + str(exc)[:200])
+                emit('Tác vụ KS Denki lỗi: ' + str(exc)[:220])
+            finally:
+                self.ks_run_lock.release()
         threading.Thread(target=work, daemon=True).start()
 
     def ks_daibiki_guide(self):
