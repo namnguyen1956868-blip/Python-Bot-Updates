@@ -721,7 +721,7 @@ class PythonBot(tk.Tk):
     def yamada_log_event(self, detail):
         if hasattr(self, 'yamada_log') and self.yamada_log.winfo_exists():
             self.yamada_log.config(state='normal')
-            self.yamada_log.insert('end', '[' + datetime.now().strftime('%H:%M:%S') + '] ' + detail + '\\n')
+            self.yamada_log.insert('end', '[' + datetime.now().strftime('%H:%M:%S') + '] ' + detail + '\n')
             self.yamada_log.see('end')
             self.yamada_log.config(state='disabled')
 
