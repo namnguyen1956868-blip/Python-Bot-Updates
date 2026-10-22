@@ -1,4 +1,4 @@
-"""Python Bot v1.5.0 - desktop website monitor (standard library only)."""
+"""Python Bot v1.6.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.5.0'
+VERSION = '1.6.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -98,6 +98,8 @@ class PythonBot(tk.Tk):
         self.latest_release = None
         self.update_busy = False
         self.ks_run_lock = threading.Lock()
+        self.ks_order_approval = threading.Event()
+        self.ks_checkout_ready = False
         self.discord_listener = None
         self.discord_state = 'Chưa kết nối'
         self.active_page = 'Giám sát'
@@ -717,6 +719,7 @@ class PythonBot(tk.Tk):
         self.button(q, 'CHẠY – AutoCart + Daibiki', self.ks_prepare_purchase, True).pack(anchor='w', pady=7)
         self.button(q, 'Mở sản phẩm bằng Chrome đã đăng nhập', self.ks_open_product).pack(anchor='w', pady=5)
         self.button(q, 'Hướng dẫn checkout Daibiki', self.ks_daibiki_guide).pack(anchor='w', pady=5)
+        self.button(q, 'XÁC NHẬN GỬI ĐƠN THẬT', self.ks_approve_order).pack(anchor='w', pady=5)
         self.label(q, 'Daibiki chỉ có nếu trang thanh toán cho phép đối với sản phẩm này. Kiểm tra phí và tổng tiền trước khi tự nhấn nút xác nhận đơn hàng.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=6)
 
 
@@ -892,6 +895,15 @@ class PythonBot(tk.Tk):
         webbrowser.open(url)
         self.ks_log_event('Đã mở sản phẩm KS Denki. Hãy kiểm tra giỏ và chọn 代金引換 tại bước thanh toán.')
 
+    def ks_approve_order(self):
+        if not self.ks_checkout_ready:
+            messagebox.showwarning('KS Denki', 'Chưa phát hiện trang xác nhận đơn hàng; chưa gửi đơn.')
+            return
+        if messagebox.askyesno('Xác nhận đơn hàng thật',
+             'Bạn đã kiểm tra sản phẩm, số lượng, địa chỉ, phí Daibiki và tổng tiền trên Chrome?\n\nBấm Yes sẽ gửi một đơn hàng thật.'):
+            self.ks_order_approval.set()
+            self.ks_log_event('Đã phê duyệt gửi một đơn hàng.')
+
     def ks_prepare_purchase(self):
         from urllib.parse import parse_qs
         url = self.ks_product_url.get().strip()
@@ -912,6 +924,8 @@ class PythonBot(tk.Tk):
         self.ks_log_event('Sử dụng phiên Chrome riêng cho bot; nếu chưa đăng nhập, bạn đăng nhập trong cửa sổ này.')
         def emit(message):
             self.events.put(('ks_status', message))
+        self.ks_order_approval.clear()
+        self.ks_checkout_ready = False
         if not self.ks_run_lock.acquire(blocking=False):
             messagebox.showwarning('KS Denki', 'Một tác vụ Chrome KS Denki đang chạy. Đóng cửa sổ Chrome của bot trước khi chạy lại.')
             return
@@ -1002,7 +1016,35 @@ class PythonBot(tk.Tk):
                             except PWError as exc:
                                 emit('Chưa thể chọn Daibiki tự động: ' + str(exc)[:110])
                         emit('Kiểm tra sản phẩm, địa chỉ, phí Daibiki và tổng tiền trên Chrome.')
-                        emit('Nút 上記の内容で注文する tạo đơn thật: chỉ bạn xác nhận và bấm nút cuối.')
+                        emit('Đang kiểm tra trang xác nhận cuối...')
+                        import time as _ks_time
+                        final_button = page.get_by_text('上記の内容で注文する', exact=True).first
+                        try:
+                            if final_button.is_visible(timeout=2500):
+                                self.ks_checkout_ready = True
+                                emit('Đã thấy nút đặt hàng cuối. Kiểm tra tổng tiền và bấm XÁC NHẬN GỬI ĐƠN THẬT trong bot.')
+                        except PWError:
+                            emit('Chưa tới trang xác nhận cuối; hãy hoàn tất các bước trên Chrome.')
+                        deadline = _ks_time.monotonic() + 600
+                        did_submit = False
+                        while context.pages and _ks_time.monotonic() < deadline:
+                            try:
+                                if self.ks_order_approval.is_set() and self.ks_checkout_ready and not did_submit:
+                                    did_submit = True
+                                    self.ks_order_approval.clear()
+                                    final_button.click(timeout=6000, no_wait_after=True)
+                                    emit('Đã gửi một đơn. Đang theo dõi biên nhận...')
+                                body_text = page.locator('body').inner_text(timeout=1800)[:12000]
+                                if re.search('ご注文完了|注文が完了|ご注文ありがとうございました', body_text):
+                                    match = re.search('(?:ご注文番号|注文番号)[：: ]*([0-9A-Za-z-]{6,32})', body_text)
+                                    emit('Website báo hoàn tất. Mã đơn: ' + match.group(1) if match else 'Website báo hoàn tất nhưng chưa đọc được mã đơn.')
+                                    break
+                                page.wait_for_timeout(600)
+                            except PWError as exc:
+                                emit('Không thể xác minh đơn: ' + str(exc)[:120])
+                                break
+                        self.ks_checkout_ready = False
+                        emit('Kết thúc theo dõi; không gửi thêm đơn.')
                         while context.pages:
                             try:
                                 page.wait_for_timeout(500)
