@@ -66,7 +66,8 @@ def install(zip_path, folder, pid):
     finally:
         zip_path.unlink(missing_ok=True)
     shutil.rmtree(backup, ignore_errors=True)
-    os.startfile(str(folder / 'START_PYTHON_BOT.vbs')) if os.name == 'nt' else None
+    if os.name == 'nt':
+        os.startfile(str(folder / 'START_PYTHON_BOT.pyw'))
 
 
 if __name__ == '__main__':
