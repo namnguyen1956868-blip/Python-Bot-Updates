@@ -1,4 +1,4 @@
-"""Python Bot v0.9.13 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.14 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.13'
+VERSION = '0.9.14'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -705,6 +705,22 @@ class PythonBot(tk.Tk):
             values=['Chưa chọn'] + [str(v.get('label','')) for v in self.profile_records()])
         self.yamada_profile.current(0)
         self.yamada_profile.pack(anchor='w', pady=4)
+        self.label(p, 'Chế độ thử an toàn: mở trang và thử thêm giỏ; luôn dừng trước xác nhận đơn hàng.', 10, MUTED, wraplength=740).pack(anchor='w', pady=7)
+        row = tk.Frame(p, bg=PANEL)
+        row.pack(anchor='w', pady=10)
+        self.button(row, 'Mở trang Guest (Chrome)', self.yamada_open_guest, True).pack(side='left', padx=(0,8))
+        self.button(row, 'AutoCart Chromium (thêm giỏ)', self.yamada_autocart_test).pack(side='left')
+        self.button(row, 'Mở trong trình duyệt thật', self.yamada_open_guest).pack(side='left', padx=(8,0))
+        self.yamada_status = self.label(p, 'Chưa chạy thử.', 11, MUTED, wraplength=750, justify='left')
+        self.yamada_status.pack(anchor='w', pady=10)
+        self.label(p, 'AutoCart sử dụng Chromium của Playwright (cài bằng py -m playwright install chromium). Trình duyệt mở để kiểm tra giỏ; không tự xác nhận checkout/3DS.', 10, MUTED, wraplength=750, justify='left').pack(anchor='w', pady=5)
+        history = self.panel()
+        self.label(history, 'NHẬT KÝ YAMADA GUEST', 12, bold=True).pack(anchor='w', pady=(0,7))
+        self.yamada_log = tk.Text(history, height=7, bg='#0b0d12', fg='#cbd4e1', insertbackground='white',
+                                  font=('Consolas', 10), state='disabled', wrap='word', relief='flat')
+        self.yamada_log.pack(fill='both', expand=True)
+        self.yamada_log_event('Sẵn sàng. Chưa thực hiện giao dịch.')
+        self.label(history, 'Không hiển thị, lưu hoặc ghi nhật ký số thẻ, CVV và OTP.', 10, MUTED).pack(anchor='w', pady=5)
         sec = self.panel()
         self.label(sec, 'THẺ TRONG PHIÊN (KHÔNG LƯU VÀO FILE)', 12, bold=True).pack(anchor='w', pady=(0,7))
         self.label(sec, 'Số thẻ', 10, MUTED).pack(anchor='w')
@@ -721,22 +737,7 @@ class PythonBot(tk.Tk):
         cvv_entry.pack(anchor='w', pady=3)
         self.button(sec, 'Xóa dữ liệu thẻ trong phiên', self.clear_test_card).pack(anchor='w', pady=7)
         self.label(sec, 'Các ô này chỉ dùng để chuẩn bị và kiểm tra nhập liệu. Phiên bản này chưa tự chuyển số thẻ hoặc CVV vào checkout Yamada, chưa tự đặt hàng.', 10, MUTED, wraplength=730, justify='left').pack(anchor='w', pady=5)
-        self.label(p, 'Chế độ thử an toàn: mở trang và thử thêm giỏ; luôn dừng trước xác nhận đơn hàng.', 10, MUTED, wraplength=740).pack(anchor='w', pady=7)
-        row = tk.Frame(p, bg=PANEL)
-        row.pack(anchor='w', pady=10)
-        self.button(row, 'Mở trang Guest (Chrome)', self.yamada_open_guest, True).pack(side='left', padx=(0,8))
-        self.button(row, 'AutoCart Chromium (thêm giỏ)', self.yamada_autocart_test).pack(side='left')
-        self.button(row, 'Mở trong trình duyệt thật', self.yamada_open_guest).pack(side='left', padx=(8,0))
-        self.yamada_status = self.label(p, 'Chưa chạy thử.', 11, MUTED, wraplength=750, justify='left')
-        self.yamada_status.pack(anchor='w', pady=10)
-        self.label(p, 'AutoCart sử dụng Chromium của Playwright (cài bằng py -m playwright install chromium). Trình duyệt mở để kiểm tra giỏ; không tự xác nhận checkout/3DS.', 10, MUTED, wraplength=750, justify='left').pack(anchor='w', pady=5)
-        history = self.panel()
-        self.label(history, 'NHẬT KÝ YAMADA GUEST', 12, bold=True).pack(anchor='w', pady=(0,7))
-        self.yamada_log = tk.Text(history, height=10, bg='#0b0d12', fg='#cbd4e1', insertbackground='white',
-                                  font=('Consolas', 10), state='disabled', wrap='word', relief='flat')
-        self.yamada_log.pack(fill='both', expand=True)
-        self.yamada_log_event('Sẵn sàng. Chưa thực hiện giao dịch.')
-        self.label(history, 'Không hiển thị, lưu hoặc ghi nhật ký số thẻ, CVV và OTP.', 10, MUTED).pack(anchor='w', pady=5)
+
 
     def yamada_log_event(self, detail):
         if hasattr(self, 'yamada_log') and self.yamada_log.winfo_exists():
