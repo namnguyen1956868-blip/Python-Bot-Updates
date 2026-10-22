@@ -49,8 +49,13 @@ jobs:
 
       - name: Package Python Bot
         run: |
-          zip -r "Python_Bot_${VERSION}.zip" python_bot \
-            -x "*/__pycache__/*" "*.pyc"
+          files=()
+          for name in python_bot.py update_manager.py apply_update.py START_PYTHON_BOT.pyw START_PYTHON_BOT.vbs START_PYTHON_BOT.bat discord_listener.py README_VI.txt RELEASE_GUIDE.txt README_DISCORD.txt README_UPDATE.txt; do
+            if [ -f "python_bot/$name" ]; then
+              files+=("python_bot/$name")
+            fi
+          done
+          zip "Python_Bot_${VERSION}.zip" "${files[@]}"
           sha256sum "Python_Bot_${VERSION}.zip" \
             > "Python_Bot_${VERSION}.zip.sha256"
 
