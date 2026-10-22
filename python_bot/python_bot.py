@@ -1,4 +1,4 @@
-"""Python Bot v0.9.11 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.12 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.11'
+VERSION = '0.9.12'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -798,6 +798,15 @@ class PythonBot(tk.Tk):
                         if host not in ('www.yamada-denkiweb.com', 'yamada-denkiweb.com'):
                             emit('Trang chuyển miền khác. Dừng để kiểm tra.')
                             return
+                        # The cookie notice can intercept pointer events at the bottom of Yamada.
+                        try:
+                            cookie_ok = page.get_by_role('button', name='OK', exact=True)
+                            if cookie_ok.count() and cookie_ok.first.is_visible(timeout=1500):
+                                emit('Phát hiện thông báo Cookie; đang xác nhận OK...')
+                                cookie_ok.first.click(timeout=4500)
+                                emit('Đã xử lý thông báo Cookie.')
+                        except PWError as exc:
+                            emit('Không tự đóng được bảng Cookie: ' + str(exc)[:100])
                         emit('Đã nhận nội dung. Đang tìm nút カートに入れる...')
                         options = [
                             page.get_by_role('button', name='カートに入れる'),
