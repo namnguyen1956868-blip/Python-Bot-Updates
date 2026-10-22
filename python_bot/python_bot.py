@@ -1,4 +1,4 @@
-"""Python Bot v1.2.2 - desktop website monitor (standard library only)."""
+"""Python Bot v1.2.3 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.2.2'
+VERSION = '1.2.3'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -712,6 +712,7 @@ class PythonBot(tk.Tk):
         self.ks_password.configure(show='●')
         self.ks_password.pack(anchor='w', pady=4)
         self.button(p, 'Lưu email + mật khẩu an toàn', self.ks_save_credentials, True).pack(anchor='w', pady=7)
+        self.button(p, 'Kiểm tra mật khẩu đã lưu', self.ks_check_credentials).pack(anchor='w', pady=5)
         self.button(p, 'Xóa mật khẩu đã lưu', self.ks_delete_credentials).pack(anchor='w', pady=5)
         self.button(p, 'Mở Chrome và điền đăng nhập', self.ks_auto_login).pack(anchor='w', pady=6)
         self.ks_login_status = self.label(p, 'Chưa chạy đăng nhập tự động.', 10, MUTED, wraplength=760, justify='left')
@@ -760,12 +761,35 @@ class PythonBot(tk.Tk):
         try:
             import keyring
             keyring.set_password('PythonBot.KSDenki', email, password)
+            # Verify readback before clearing the input: otherwise the UI can
+            # falsely suggest a secret was stored when the backend failed.
+            stored = keyring.get_password('PythonBot.KSDenki', email)
+            if stored != password:
+                messagebox.showerror('KS Denki', 'Không xác minh được mật khẩu vừa lưu. Ô nhập được giữ nguyên để bạn thử lại.')
+                return
             self.data['ksdenki_account_email'] = email
             save_data(self.data)
             self.ks_password.delete(0, 'end')
-            self.ks_log_event('Đã lưu thông tin đăng nhập trong Windows Credential Manager.')
+            self.ks_log_event('Đã lưu và kiểm tra đọc lại mật khẩu thành công từ Windows Credential Manager.')
+            messagebox.showinfo('KS Denki', 'Đã lưu và kiểm tra mật khẩu thành công. Ô mật khẩu được xóa để bảo mật.')
         except Exception as exc:
             messagebox.showerror('Lưu mật khẩu', 'Không lưu được vào Windows Credential Manager: ' + str(exc)[:150])
+
+    def ks_check_credentials(self):
+        email = self.ks_account_email.get().strip()
+        if not email:
+            messagebox.showerror('KS Denki', 'Nhập email để kiểm tra mật khẩu đã lưu.')
+            return
+        try:
+            import keyring
+            saved = keyring.get_password('PythonBot.KSDenki', email)
+            if saved:
+                messagebox.showinfo('KS Denki', 'Đã tìm thấy mật khẩu lưu an toàn cho email này. Mật khẩu không hiển thị trong ô nhập.')
+                self.ks_log_event('Đã xác nhận mật khẩu có trong kho lưu trữ an toàn.')
+            else:
+                messagebox.showwarning('KS Denki', 'Chưa tìm thấy mật khẩu lưu cho email này. Hãy nhập mật khẩu và bấm Lưu email + mật khẩu an toàn.')
+        except Exception as exc:
+            messagebox.showerror('KS Denki', 'Không kiểm tra được kho lưu trữ: ' + str(exc)[:160])
 
     def ks_delete_credentials(self):
         email = self.ks_account_email.get().strip()
