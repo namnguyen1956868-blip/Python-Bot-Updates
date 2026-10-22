@@ -1,4 +1,4 @@
-"""Python Bot v1.1.0 - desktop website monitor (standard library only)."""
+"""Python Bot v1.2.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '1.1.0'
+VERSION = '1.2.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -336,6 +336,9 @@ class PythonBot(tk.Tk):
                             self.update_msg.configure(text='Tải thất bại: ' + event[2])
                     elif event[1]:
                         self.apply_downloaded_update(event[1])
+                elif event[0] == 'ks_status':
+                    if self.active_page == 'KS Denki':
+                        self.ks_log_event(event[1])
                 elif event[0] == 'gmail_status':
                     if self.active_page == 'Gmail OTP' and hasattr(self, 'gmail_status'):
                         self.gmail_status.config(text=event[1])
@@ -697,13 +700,20 @@ class PythonBot(tk.Tk):
         self.heading('KS Denki - Tài khoản & Daibiki', 'Quản lý tài khoản KS Denki và ưu tiên thanh toán khi nhận hàng (代金引換).')
         p = self.panel()
         self.label(p, 'TÀI KHOẢN KS DENKI', 12, bold=True).pack(anchor='w', pady=(0,7))
-        self.label(p, 'Email tài khoản (không lưu mật khẩu)', 10, MUTED).pack(anchor='w')
+        self.label(p, 'Email tài khoản', 10, MUTED).pack(anchor='w')
         self.ks_account_email = self.entry(p, 45)
         self.ks_account_email.insert(0, self.data.get('ksdenki_account_email', ''))
         self.ks_account_email.pack(anchor='w', pady=4)
         self.button(p, 'Lưu email tài khoản', self.ks_save_account, True).pack(anchor='w', pady=7)
+        self.label(p, 'Mật khẩu KS Denki (lưu mã hóa trong Windows Credential Manager)', 10, MUTED).pack(anchor='w', pady=4)
+        self.ks_password = self.entry(p, 40)
+        self.ks_password.configure(show='●')
+        self.ks_password.pack(anchor='w', pady=4)
+        self.button(p, 'Lưu email + mật khẩu an toàn', self.ks_save_credentials, True).pack(anchor='w', pady=7)
+        self.button(p, 'Xóa mật khẩu đã lưu', self.ks_delete_credentials).pack(anchor='w', pady=5)
+        self.button(p, 'Mở Chrome và điền đăng nhập', self.ks_auto_login).pack(anchor='w', pady=6)
         self.button(p, 'Mở trang đăng nhập KS Denki', self.ks_open_login).pack(anchor='w', pady=6)
-        self.label(p, 'Đăng nhập trong Chrome bằng tài khoản của bạn. Bot không lưu mật khẩu, không tự đăng nhập hay vượt CAPTCHA.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=(6,2))
+        self.label(p, 'Mật khẩu được giữ trong Windows Credential Manager, không ghi vào config.json. Chrome sẽ điền thông tin; bạn giải CAPTCHA/puzzle và xác nhận khi được yêu cầu.', 10, MUTED, wraplength=790, justify='left').pack(anchor='w', pady=(6,2))
 
         q = self.panel()
         self.label(q, 'SẢN PHẨM VÀ THANH TOÁN', 12, bold=True).pack(anchor='w', pady=(0,8))
@@ -736,6 +746,82 @@ class PythonBot(tk.Tk):
         self.data['ksdenki_account_email'] = email
         save_data(self.data)
         self.ks_log_event('Đã lưu nhãn email tài khoản. Không lưu mật khẩu.')
+
+    def ks_save_credentials(self):
+        email = self.ks_account_email.get().strip()
+        password = self.ks_password.get()
+        if not re.fullmatch(r'[^@\\s]+@[^@\\s]+\\.[^@\\s]+', email or '') or not password:
+            messagebox.showerror('KS Denki', 'Hãy nhập email hợp lệ và mật khẩu.')
+            return
+        try:
+            import keyring
+            keyring.set_password('PythonBot.KSDenki', email, password)
+            self.data['ksdenki_account_email'] = email
+            save_data(self.data)
+            self.ks_password.delete(0, 'end')
+            self.ks_log_event('Đã lưu thông tin đăng nhập trong Windows Credential Manager.')
+        except Exception as exc:
+            messagebox.showerror('Lưu mật khẩu', 'Không lưu được vào Windows Credential Manager: ' + str(exc)[:150])
+
+    def ks_delete_credentials(self):
+        email = self.ks_account_email.get().strip()
+        if not email:
+            return
+        try:
+            import keyring
+            if keyring.get_password('PythonBot.KSDenki', email):
+                keyring.delete_password('PythonBot.KSDenki', email)
+            self.ks_password.delete(0, 'end')
+            self.ks_log_event('Đã xóa mật khẩu được lưu cho tài khoản này.')
+        except Exception as exc:
+            messagebox.showerror('Xóa mật khẩu', str(exc)[:160])
+
+    def ks_auto_login(self):
+        email = self.ks_account_email.get().strip()
+        if not email:
+            messagebox.showerror('KS Denki', 'Nhập email tài khoản.')
+            return
+        try:
+            import keyring
+            password = keyring.get_password('PythonBot.KSDenki', email)
+        except Exception as exc:
+            messagebox.showerror('KS Denki', 'Không đọc được Windows Credential Manager: ' + str(exc)[:120])
+            return
+        if not password:
+            messagebox.showerror('KS Denki', 'Chưa lưu mật khẩu. Nhập và bấm Lưu email + mật khẩu an toàn.')
+            return
+        self.ks_log_event('Đang mở Chrome để điền email và mật khẩu KS Denki...')
+        def work():
+            try:
+                from playwright.sync_api import sync_playwright, Error as PWError
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(channel='chrome', headless=False)
+                    try:
+                        context = browser.new_context(locale='ja-JP')
+                        page = context.new_page()
+                        page.goto('https://www.ksdenki.com/shop/customer/login.aspx', wait_until='domcontentloaded', timeout=30000)
+                        host = (urlparse(page.url).hostname or '').lower()
+                        if host not in ('ksdenki.com', 'www.ksdenki.com'):
+                            self.events.put(('ks_status','Trang chuyển miền khác; không điền mật khẩu.'))
+                            return
+                        email_input = page.locator('input[type="email"], input[autocomplete="username"], input[name*="mail" i]').first
+                        pw_input = page.locator('input[type="password"]').first
+                        if email_input.count() and pw_input.count():
+                            email_input.fill(email, timeout=6000)
+                            pw_input.fill(password, timeout=6000)
+                            self.events.put(('ks_status','Đã điền email và mật khẩu. Bạn hoàn thành puzzle/CAPTCHA và nhấn ログイン nếu cần.'))
+                        else:
+                            self.events.put(('ks_status','Không tìm thấy đúng ô đăng nhập; kiểm tra thủ công trên Chrome.'))
+                        while not page.is_closed():
+                            try:
+                                page.wait_for_timeout(400)
+                            except PWError:
+                                break
+                    finally:
+                        browser.close()
+            except Exception as exc:
+                self.events.put(('ks_status','Không tự điền đăng nhập được: ' + str(exc)[:180]))
+        threading.Thread(target=work, daemon=True).start()
 
     def ks_save_payment(self):
         self.data['ksdenki_daibiki'] = self.ks_daibiki_var.get()
