@@ -1,4 +1,4 @@
-"""Python Bot v0.9.1 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.2 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.1'
+VERSION = '0.9.2'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -508,7 +508,26 @@ class PythonBot(tk.Tk):
         self.card_test_result = self.label(test, 'Chưa kiểm tra', 10, MUTED)
         self.card_test_result.pack(anchor='w', pady=5)
         self.label(test, 'Chỉ kiểm tra định dạng, không xác nhận thẻ tồn tại/hợp lệ để thanh toán. Sử dụng Chrome Autofill cho checkout và nhập CVV, OTP bằng tay.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=6)
-        self.button(test, 'Hướng dẫn thiết lập thẻ Chrome', lambda: messagebox.showinfo('Chrome', 'Mở Chrome và dán: chrome://settings/payments')).pack(anchor='w', pady=5)
+        self.button(test, 'Mở cài đặt thẻ Chrome', self.open_chrome_payments, True).pack(anchor='w', pady=5)
+        self.label(test, 'Sau khi thêm thẻ vào Chrome, mở Yamada bằng nút Mở trang Guest (Chrome thông thường). Tại ô thẻ trên checkout, chọn gợi ý Autofill và xác thực theo yêu cầu của ngân hàng.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=5)
+
+    def open_chrome_payments(self):
+        import shutil
+        import os
+        from pathlib import Path
+        candidates = [shutil.which('chrome'), shutil.which('chrome.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES',''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+            os.path.join(os.environ.get('PROGRAMFILES(X86)',''), 'Google', 'Chrome', 'Application', 'chrome.exe'),
+            os.path.join(os.environ.get('LOCALAPPDATA',''), 'Google', 'Chrome', 'Application', 'chrome.exe')]
+        for executable in candidates:
+            if executable and Path(executable).is_file():
+                try:
+                    subprocess.Popen([executable, 'chrome://settings/payments'])
+                    return
+                except OSError:
+                    continue
+        messagebox.showinfo('Chrome Autofill', 'Mở Chrome thông thường và dán: chrome://settings/payments')
+
 
     def clear_test_card(self):
         for field in ('test_pan', 'test_exp', 'test_cvv'):
@@ -685,7 +704,7 @@ class PythonBot(tk.Tk):
         self.label(p, 'Chế độ thử an toàn: mở trang và thử thêm giỏ; luôn dừng trước xác nhận đơn hàng.', 10, MUTED, wraplength=740).pack(anchor='w', pady=7)
         row = tk.Frame(p, bg=PANEL)
         row.pack(anchor='w', pady=10)
-        self.button(row, 'Mở trang Guest', self.yamada_open_guest, True).pack(side='left', padx=(0,8))
+        self.button(row, 'Mở trang Guest (Chrome)', self.yamada_open_guest, True).pack(side='left', padx=(0,8))
         self.button(row, 'Thử AutoCart (Chrome)', self.yamada_autocart_test).pack(side='left')
         self.yamada_status = self.label(p, 'Chưa chạy thử.', 11, MUTED, wraplength=750, justify='left')
         self.yamada_status.pack(anchor='w', pady=10)
@@ -707,7 +726,7 @@ class PythonBot(tk.Tk):
         if not url:
             return
         webbrowser.open(url)
-        self.yamada_status.configure(text='Đã mở trang sản phẩm. Hãy dùng lựa chọn ゲスト購入 khi trang cho phép.')
+        self.yamada_status.configure(text='Đã mở trang trong trình duyệt mặc định. Nếu Chrome là mặc định và đã lưu thẻ, Chrome có thể đề xuất Autofill ở bước thanh toán. Bạn tự xác nhận CVV/3DS.')
 
     def yamada_autocart_test(self):
         url = self.yamada_validate_url()
