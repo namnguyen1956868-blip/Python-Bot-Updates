@@ -1,4 +1,4 @@
-"""Python Bot v0.9.5 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.6 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.5'
+VERSION = '0.9.6'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -768,64 +768,76 @@ class PythonBot(tk.Tk):
         url = self.yamada_validate_url()
         if not url:
             return
-        self.yamada_status.configure(text='Đang thử Yamada ở chế độ ẩn...')
-        self.yamada_log_event('Bắt đầu kiểm tra sản phẩm bằng Chrome ẩn (headless).')
-        def emit(status):
-            self.events.put(('yamada_status', status))
+        self.yamada_status.configure(text='Đang kiểm tra Yamada ẩn...')
+        self.yamada_log_event('Bắt đầu thử kết nối Yamada bằng Chrome ẩn.')
+        def emit(msg):
+            self.events.put(('yamada_status', msg))
         def work():
             try:
-                from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
+                from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout, Error as PWError
                 with sync_playwright() as p:
-                    try:
-                        browser = p.chromium.launch(channel='chrome', headless=True, timeout=20000)
-                    except Exception as exc:
-                        emit('Chrome ẩn không khởi động được: ' + str(exc)[:190] + '. Hãy cập nhật Chrome, kiểm tra phần mềm bảo mật.')
-                        return
-                    try:
-                        context = browser.new_context(locale='ja-JP')
-                        page = context.new_page()
+                    # Retry only when the HTTP/2 transport fails. A fresh browser is required.
+                    for attempt in range(2):
+                        launch_args = ['--disable-http2'] if attempt else []
+                        browser = None
                         try:
-                            response = page.goto(url, wait_until='commit', timeout=25000)
-                            page.wait_for_load_state('domcontentloaded', timeout=15000)
-                        except PlaywrightTimeout:
-                            emit('Yamada tải chậm; kiểm tra kết nối hoặc thử lại. Không tiếp tục nếu trang chưa sẵn sàng.')
-                            return
-                        if page.is_closed():
-                            emit('Trang Chrome tự đóng trong quá trình tải. Hãy kiểm tra Chrome/antivirus và URL.')
-                            return
-                        emit('Đã mở trang sản phẩm ẩn, đang tìm nút thêm giỏ...')
-                        try:
-                            page.wait_for_timeout(900)
-                        except Exception:
-                            pass
-                        if response and response.status >= 400:
-                            emit('Yamada phản hồi HTTP ' + str(response.status) + '; không thêm giỏ.')
-                            return
-                        if not urlparse(page.url).hostname in ('www.yamada-denkiweb.com','yamada-denkiweb.com'):
-                            emit('Trang chuyển sang website khác. Dừng để bạn kiểm tra.')
-                            return
-                        selectors = [
-                            page.get_by_role('button', name=re.compile('カートに入れる|カートへ入れる|カートに追加')),
-                            page.get_by_role('link', name=re.compile('カートに入れる|カートへ入れる|カートに追加')),
-                            page.locator('input[type=submit][value*="カート"]')
-                        ]
-                        clicked = False
-                        for selector in selectors:
+                            browser = p.chromium.launch(channel='chrome', headless=True,
+                                                        args=launch_args, timeout=20000)
+                            context = browser.new_context(locale='ja-JP')
+                            page = context.new_page()
                             try:
-                                if selector.count() and selector.first.is_visible() and selector.first.is_enabled():
-                                    selector.first.click(timeout=3500)
-                                    clicked = True
-                                    break
-                            except (PlaywrightTimeout, ValueError):
-                                continue
-                        emit('Đã thử thêm sản phẩm vào giỏ (chế độ ẩn). Chưa xác minh đơn hàng; không tiến hành checkout.' if clicked
-                             else 'Không thấy nút thêm giỏ khả dụng (có thể hết hàng hoặc trang thay đổi).')
-                    finally:
-                        browser.close()
+                                response = page.goto(url, wait_until='domcontentloaded', timeout=30000)
+                            except PWError as exc:
+                                detail = str(exc)
+                                if 'ERR_HTTP2_PROTOCOL_ERROR' in detail and attempt == 0:
+                                    emit('Kết nối HTTP/2 thất bại. Thử lại một lần bằng HTTP/1.1...')
+                                    continue
+                                if 'ERR_HTTP2_PROTOCOL_ERROR' in detail:
+                                    emit('Lỗi giao thức mạng vẫn còn. Hãy thử mở Yamada trong Chrome thường, kiểm tra VPN/proxy và mạng.')
+                                else:
+                                    emit('Không mở được trang Yamada: ' + detail[:180])
+                                return
+                            if response and response.status >= 400:
+                                emit('Yamada trả về HTTP ' + str(response.status) + '. Dừng kiểm tra.')
+                                return
+                            host = (urlparse(page.url).hostname or '').lower()
+                            if host not in ('www.yamada-denkiweb.com', 'yamada-denkiweb.com'):
+                                emit('Trang chuyển sang miền khác. Dừng để kiểm tra thủ công.')
+                                return
+                            emit('Đã tải trang. Đang tìm nút thêm giỏ...')
+                            selectors = (
+                                page.get_by_role('button', name=re.compile('カートに入れる|カートへ入れる|カートに追加')),
+                                page.get_by_role('link', name=re.compile('カートに入れる|カートへ入れる|カートに追加')),
+                                page.locator('input[type=submit][value*="カート"]')
+                            )
+                            clicked = False
+                            for candidate in selectors:
+                                try:
+                                    if candidate.count() and candidate.first.is_visible() and candidate.first.is_enabled():
+                                        candidate.first.click(timeout=3500)
+                                        clicked = True
+                                        break
+                                except PWError:
+                                    continue
+                            emit('Đã thử thêm vào giỏ; chưa đặt hàng hoặc thanh toán.' if clicked
+                                 else 'Không tìm thấy nút thêm giỏ khả dụng. Hãy kiểm tra trang bằng Chrome thường.')
+                            return
+                        except PWTimeout:
+                            emit('Yamada phản hồi quá chậm. Dừng tác vụ; có thể thử lại hoặc đổi mạng.')
+                            return
+                        except Exception as exc:
+                            emit('Lỗi Chrome ẩn: ' + str(exc)[:200])
+                            return
+                        finally:
+                            if browser:
+                                try:
+                                    browser.close()
+                                except Exception:
+                                    pass
             except ImportError:
                 emit('Thiếu Playwright: py -m pip install playwright')
             except Exception as exc:
-                emit('Yamada ẩn thất bại: ' + str(exc)[:230])
+                emit('Lỗi kiểm tra: ' + str(exc)[:200])
         threading.Thread(target=work, daemon=True).start()
 
     def page_discord(self):
