@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 from update_manager import check_release, download_release
 from jan_match import extract_jan, matches_tasks
 
+# Release automation: versioned source is published by GitHub Actions.
 APP_NAME = 'Python Bot'
 VERSION = '0.6.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
