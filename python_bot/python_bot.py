@@ -1,4 +1,4 @@
-"""Python Bot v0.9.18 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.19 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.18'
+VERSION = '0.9.19'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -709,11 +709,11 @@ class PythonBot(tk.Tk):
         row = tk.Frame(p, bg=PANEL)
         row.pack(anchor='w', pady=10)
         self.button(row, 'Mở trang Guest (Chrome)', self.yamada_open_guest, True).pack(side='left', padx=(0,8))
-        self.button(row, 'AutoCart Chromium (thêm giỏ)', self.yamada_autocart_test).pack(side='left')
+        self.button(row, 'AutoCart Chrome Headless', self.yamada_autocart_test).pack(side='left')
         self.button(row, 'Mở trong trình duyệt thật', self.yamada_open_guest).pack(side='left', padx=(8,0))
         self.yamada_status = self.label(p, 'Chưa chạy thử.', 11, MUTED, wraplength=750, justify='left')
         self.yamada_status.pack(anchor='w', pady=10)
-        self.label(p, 'AutoCart sử dụng Chromium của Playwright (cài bằng py -m playwright install chromium). Trình duyệt mở để kiểm tra giỏ; không tự xác nhận checkout/3DS.', 10, MUTED, wraplength=750, justify='left').pack(anchor='w', pady=5)
+        self.label(p, 'AutoCart thử Google Chrome Headless (không hiện cửa sổ), chỉ thêm giỏ và ghi nhật ký. Chrome thường dùng để kiểm tra hoặc tự xác nhận checkout/3DS.', 10, MUTED, wraplength=750, justify='left').pack(anchor='w', pady=5)
         history = self.panel()
         self.label(history, 'NHẬT KÝ YAMADA GUEST', 12, bold=True).pack(anchor='w', pady=(0,7))
         self.yamada_log = tk.Text(history, height=7, bg='#0b0d12', fg='#cbd4e1', insertbackground='white',
@@ -778,7 +778,7 @@ class PythonBot(tk.Tk):
             try:
                 from playwright.sync_api import sync_playwright, Error as PWError, TimeoutError as PWTimeout
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=False, timeout=20000)
+                    browser = p.chromium.launch(channel='chrome', headless=True, timeout=20000)
                     try:
                         context = browser.new_context(locale='ja-JP')
                         page = context.new_page()
@@ -786,7 +786,7 @@ class PythonBot(tk.Tk):
                         import time as _timer
                         load_started = _timer.perf_counter()
                         emit('Đo tốc độ: bắt đầu tải trang (không chặn tài nguyên).')
-                        emit('Đã mở Chromium (Playwright); đang tải trang sản phẩm...')
+                        emit('Đã mở Google Chrome Headless; đang tải trang sản phẩm...')
                         try:
                             page.goto(url, wait_until='commit', timeout=12000)
                             emit('Phản hồi đầu tiên sau %.1f giây.' % (_timer.perf_counter() - load_started))
@@ -875,7 +875,7 @@ class PythonBot(tk.Tk):
                                 emit('Chưa có bằng chứng thêm giỏ thành công. Không tự nhấn lại; kiểm tra biểu tượng giỏ và thông báo Yamada.')
                         except PWError as exc:
                             emit('Lỗi xác minh giỏ: ' + str(exc)[:145])
-                        emit('Chrome giữ mở để bạn kiểm tra và tự thao tác checkout/3DS.')
+                        emit('Đã hoàn tất phép thử Chrome Headless. Mở Chrome thường nếu muốn kiểm tra hoặc thanh toán.')
                         while not page.is_closed():
                             try:
                                 page.wait_for_timeout(500)
@@ -886,7 +886,7 @@ class PythonBot(tk.Tk):
             except ImportError:
                 emit('Thiếu Playwright: py -m pip install playwright')
             except Exception as exc:
-                emit('Lỗi AutoCart Chromium: ' + str(exc)[:160] + ' | Nếu thiếu trình duyệt, chạy: py -m playwright install chromium')
+                emit('Lỗi AutoCart Chrome Headless: ' + str(exc)[:160] + ' | Nếu thiếu trình duyệt, chạy: py -m playwright install chromium')
         threading.Thread(target=work, daemon=True).start()
 
     def page_discord(self):
