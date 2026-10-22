@@ -485,7 +485,10 @@ class PythonBot(tk.Tk):
                               if clicked else 'Không tìm thấy nút AutoCart phù hợp hoặc trang yêu cầu thao tác thủ công.')
                     self.events.put(('yamada_status',status))
                     # Keep Chrome open while the user verifies the cart. No payment action.
-                    page.wait_for_timeout(20000)
+                    try:
+                        page.wait_for_event('close', timeout=0)
+                    except Exception:
+                        pass
                     browser.close()
             except ImportError:
                 self.events.put(('yamada_status', 'Chưa có Playwright. Chạy: py -m pip install playwright'))
