@@ -1,4 +1,4 @@
-"""Python Bot v0.8.1 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.8.1'
+VERSION = '0.9.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -127,7 +127,7 @@ class PythonBot(tk.Tk):
                  font=('Segoe UI', 18, 'bold'), pady=23).pack(fill='x')
         tk.Label(self.sidebar, text='ĐIỀU KHIỂN', fg=MUTED, bg=SIDEBAR,
                  font=('Segoe UI', 9)).pack(anchor='w', padx=20, pady=(16, 8))
-        for name in ('Tổng quan', 'Giám sát', 'Tác vụ', 'Hồ sơ', 'Proxy', 'Discord', 'JAN/EAN', 'Yamada Guest', 'Cài đặt'):
+        for name in ('Tổng quan', 'Giám sát', 'Tác vụ', 'Hồ sơ', 'Proxy', 'Discord', 'JAN/EAN', 'Yamada Guest', 'Thẻ', 'Gmail OTP', 'Cài đặt'):
             b = tk.Button(self.sidebar, text='   '+name, anchor='w', bg=SIDEBAR, fg=FG,
                           activebackground=PANEL, activeforeground=ACCENT, relief='flat',
                           font=('Segoe UI', 11), padx=14, pady=13,
@@ -163,7 +163,7 @@ class PythonBot(tk.Tk):
             btn.configure(bg=PANEL if title == name else SIDEBAR,
                           fg=ACCENT if title == name else FG)
         getattr(self, 'page_' + {'Tổng quan':'overview','Giám sát':'monitor',
-                'Tác vụ':'tasks','Hồ sơ':'profiles','Proxy':'proxy','Discord':'discord','JAN/EAN':'jan','Yamada Guest':'yamada_guest','Cài đặt':'settings'}[name])()
+                'Tác vụ':'tasks','Hồ sơ':'profiles','Proxy':'proxy','Discord':'discord','JAN/EAN':'jan','Yamada Guest':'yamada_guest','Thẻ':'cards','Gmail OTP':'gmail_otp','Cài đặt':'settings'}[name])()
 
     def page_overview(self):
         self.heading('Tổng quan', 'Trung tâm điều khiển Python Bot')
@@ -332,6 +332,9 @@ class PythonBot(tk.Tk):
                             self.update_msg.configure(text='Tải thất bại: ' + event[2])
                     elif event[1]:
                         self.apply_downloaded_update(event[1])
+                elif event[0] == 'gmail_status':
+                    if self.active_page == 'Gmail OTP' and hasattr(self, 'gmail_status'):
+                        self.gmail_status.config(text=event[1])
                 elif event[0] == 'yamada_status':
                     if self.active_page == 'Yamada Guest' and hasattr(self, 'yamada_status'):
                         self.yamada_status.configure(text=event[1])
@@ -471,6 +474,103 @@ class PythonBot(tk.Tk):
         self.data['profiles'] = profiles
         save_data(self.data)
         self.show_page('Hồ sơ')
+
+    def page_cards(self):
+        self.heading('Thẻ thanh toán', 'Chỉ lưu tên thẻ và 4 số cuối; số thẻ và CVV được quản lý bởi Chrome.')
+        p = self.panel()
+        self.label(p, 'Tên gợi nhớ (ví dụ: EPOS)', 10, MUTED).pack(anchor='w')
+        self.card_label = self.entry(p, 34)
+        self.card_label.pack(anchor='w', pady=5)
+        self.label(p, '4 số cuối', 10, MUTED).pack(anchor='w')
+        self.card_last4 = self.entry(p, 12)
+        self.card_last4.pack(anchor='w', pady=5)
+        self.button(p, 'Lưu nhãn thẻ', self.save_card_label, True).pack(anchor='w', pady=8)
+        for card in self.data.get('card_labels', []):
+            self.label(p, str(card.get('label','')) + '  •••• ' + str(card.get('last4','')), 11).pack(anchor='w', pady=4)
+        self.label(p, 'Mở chrome://settings/payments trong Chrome để lưu và chọn thẻ bằng tính năng Autofill của trình duyệt.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=(14,4))
+        self.button(p, 'Hướng dẫn mở thiết lập thẻ Chrome', lambda: messagebox.showinfo('Chrome', 'Mở Chrome và dán vào thanh địa chỉ: chrome://settings/payments')).pack(anchor='w')
+        self.label(p, 'Không nhập số thẻ đầy đủ, CVV hoặc OTP vào Python Bot. Chrome Guest Playwright đang chạy bằng phiên tạm và chưa sử dụng thẻ đã lưu trong Chrome.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=8)
+
+    def save_card_label(self):
+        label, last4 = self.card_label.get().strip(), self.card_last4.get().strip()
+        if not label or not re.fullmatch(r'[0-9]{4}', last4):
+            messagebox.showerror('Thẻ', 'Nhập tên thẻ và đúng 4 số cuối.')
+            return
+        cards = self.data.setdefault('card_labels', [])
+        if any(x.get('label') == label for x in cards):
+            messagebox.showerror('Thẻ', 'Tên thẻ đã tồn tại.')
+            return
+        cards.append({'label': label, 'last4': last4})
+        save_data(self.data)
+        self.show_page('Thẻ')
+
+    def page_gmail_otp(self):
+        self.heading('Gmail OTP', 'Đọc thư xác minh qua Google OAuth (chỉ đọc), hiển thị mã để nhập thủ công.')
+        p = self.panel()
+        self.label(p, 'Google OAuth: kết nối Gmail chỉ đọc. Không dùng mật khẩu Gmail hoặc App Password.', 11, MUTED, wraplength=780).pack(anchor='w', pady=6)
+        self.label(p, 'Đặt tệp OAuth Desktop client tại %APPDATA%\\PythonBot\\gmail_client_secret.json. Chỉ lưu tệp đó trên máy.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=6)
+        self.label(p, 'Cài: py -m pip install google-auth-oauthlib google-api-python-client', 10, MUTED).pack(anchor='w', pady=6)
+        row = tk.Frame(p, bg=PANEL)
+        row.pack(anchor='w', pady=10)
+        self.button(row, 'Kết nối Gmail (OAuth)', self.gmail_login, True).pack(side='left', padx=(0,8))
+        self.button(row, 'Đọc thư OTP mới nhất', self.gmail_check).pack(side='left')
+        self.gmail_status = self.label(p, 'Chưa kết nối Gmail.', 11, MUTED, wraplength=780, justify='left')
+        self.gmail_status.pack(anchor='w', pady=6)
+        self.label(p, 'Chỉ xem các thư gần đây có từ khóa OTP / verification / 認証. Mã không được lưu vào file hoặc tự gửi lên website.', 10, MUTED, wraplength=780, justify='left').pack(anchor='w', pady=8)
+
+    def gmail_login(self):
+        credential_file = BASE / 'gmail_client_secret.json'
+        if not credential_file.is_file():
+            messagebox.showerror('Gmail OAuth', 'Thiếu gmail_client_secret.json. Cần tạo OAuth Desktop Client và bật Gmail API trên Google Cloud.')
+            return
+        if hasattr(self, 'gmail_status'): self.gmail_status.config(text='Đang mở trình duyệt để đăng nhập Google...')
+        def work():
+            try:
+                from google_auth_oauthlib.flow import InstalledAppFlow
+                from googleapiclient.discovery import build
+                flow = InstalledAppFlow.from_client_secrets_file(str(credential_file), ['https://www.googleapis.com/auth/gmail.readonly'])
+                credentials = flow.run_local_server(port=0, open_browser=True)
+                self.gmail_service = build('gmail', 'v1', credentials=credentials, cache_discovery=False)
+                self.events.put(('gmail_status', 'Gmail đã kết nối (chỉ đọc). Có thể kiểm tra OTP.'))
+            except Exception as exc:
+                self.events.put(('gmail_status', 'Không kết nối Gmail: ' + str(exc)[:230]))
+        threading.Thread(target=work, daemon=True).start()
+
+    def gmail_check(self):
+        service = getattr(self, 'gmail_service', None)
+        if service is None:
+            messagebox.showinfo('Gmail', 'Hãy kết nối Gmail trước.')
+            return
+        if hasattr(self, 'gmail_status'): self.gmail_status.config(text='Đang tìm email xác minh trong 1 ngày gần đây...')
+        def work():
+            try:
+                query = 'newer_than:1d (OTP OR "verification code" OR "security code" OR "認証コード" OR "ワンタイム")'
+                results = service.users().messages().list(userId='me', q=query, maxResults=10).execute()
+                items = results.get('messages', [])
+                if not items:
+                    self.events.put(('gmail_status', 'Không tìm thấy email xác minh gần đây.'))
+                    return
+                import base64
+                for item in items:
+                    msg = service.users().messages().get(userId='me', id=item['id'], format='full').execute()
+                    parts = [msg.get('payload', {})]
+                    lines = [msg.get('snippet', '')]
+                    while parts:
+                        part = parts.pop()
+                        parts.extend(part.get('parts', []))
+                        if part.get('mimeType') == 'text/plain':
+                            data = part.get('body', {}).get('data')
+                            if data:
+                                lines.append(base64.urlsafe_b64decode(data + '=' * (-len(data)%4)).decode('utf-8', 'replace')[:20000])
+                    content = '\n'.join(lines)
+                    match = re.search(r'(?i)(?:OTP|verification code|security code|認証コード|ワンタイム|確認コード)[^0-9]{0,60}([0-9]{4,8})(?![0-9])',content)
+                    if match:
+                        self.events.put(('gmail_status', 'Mã xác minh trong email gần đây: ' + match.group(1) + ' — nhập thủ công, không chia sẻ.'))
+                        return
+                self.events.put(('gmail_status', 'Có thư xác minh nhưng chưa xác định được mã. Hãy kiểm tra trong Gmail.'))
+            except Exception as exc:
+                self.events.put(('gmail_status', 'Lỗi đọc Gmail: ' + str(exc)[:230]))
+        threading.Thread(target=work, daemon=True).start()
 
     def page_proxy(self):
         self.heading('Proxy', 'Danh mục proxy (bản 0.1 chỉ quản lý nhãn; chưa kết nối qua proxy)')
