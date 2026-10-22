@@ -1,4 +1,4 @@
-"""Python Bot v0.7.1 - desktop website monitor (standard library only)."""
+"""Python Bot v0.8.0 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.7.1'
+VERSION = '0.8.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -359,23 +359,117 @@ class PythonBot(tk.Tk):
             self.label(p, f'• {t["name"]}  |  {t.get("status", "Chưa kiểm tra")}', 11).pack(anchor='w', pady=8)
         self.button(p, 'Đi đến giám sát', lambda:self.show_page('Giám sát'), True).pack(anchor='w', pady=10)
 
-    def page_profiles(self):
-        self.heading('Hồ sơ', 'Lưu tên hồ sơ để tổ chức công việc. Không lưu mật khẩu hoặc thông tin thẻ.')
-        p = self.panel()
-        self.profile_entry = self.entry(p, 38)
-        self.profile_entry.pack(side='left', padx=(0,10))
-        self.button(p, '+ Tạo hồ sơ', self.add_profile, True).pack(side='left')
-        listing = self.panel()
-        for name in self.data['profiles']:
-            self.label(listing, '◉  '+name, 12).pack(anchor='w', pady=7)
-        if not self.data['profiles']: self.label(listing, 'Chưa có hồ sơ.', 11, MUTED).pack(anchor='w')
+    def profile_records(self):
+        """Convert old profile-name strings to editable dictionaries."""
+        records = []
+        for item in self.data.get('profiles', []):
+            if isinstance(item, str):
+                records.append({'label': item})
+            elif isinstance(item, dict):
+                records.append(item)
+        return records
 
-    def add_profile(self):
-        value = self.profile_entry.get().strip()
-        if value and value not in self.data['profiles']:
-            self.data['profiles'].append(value)
-            save_data(self.data)
-            self.show_page('Hồ sơ')
+    def page_profiles(self):
+        self.heading('Hồ sơ giao hàng Nhật Bản', 'Tạo, sửa và lưu thông tin giao hàng. Không lưu số thẻ, CVV, OTP hoặc mật khẩu.')
+        profiles = self.profile_records()
+        self.profile_fields = {}
+        editor = self.panel()
+        self.label(editor, 'Chọn hồ sơ để sửa (hoặc tạo mới)', 11, bold=True).grid(row=0, column=0, columnspan=2, sticky='w', pady=(0, 7))
+        names = ['+ Hồ sơ mới'] + [str(p.get('label', 'Chưa đặt tên')) for p in profiles]
+        self.profile_choice = ttk.Combobox(editor, values=names, state='readonly', width=44)
+        self.profile_choice.current(0)
+        self.profile_choice.grid(row=1, column=0, columnspan=2, sticky='w', pady=(0, 12))
+        self.profile_choice.bind('<<ComboboxSelected>>', self.load_profile_form)
+        fields = [
+            ('label', 'Tên hồ sơ *'),
+            ('last_name', 'Họ (姓) *'),
+            ('first_name', 'Tên (名) *'),
+            ('last_kana', 'Họ Katakana (セイ)'),
+            ('first_kana', 'Tên Katakana (メイ)'),
+            ('postal', 'Mã bưu điện (郵便番号) *'),
+            ('prefecture', 'Tỉnh / thành (都道府県) *'),
+            ('city', 'Quận, thành phố (市区町村) *'),
+            ('address1', 'Địa chỉ / số nhà (丁目・番地) *'),
+            ('address2', 'Tòa nhà / số phòng'),
+            ('phone', 'Số điện thoại *'),
+            ('email', 'Email (tùy chọn)'),
+        ]
+        for i, (key, title) in enumerate(fields):
+            c = i % 2
+            r = 2 + (i // 2) * 2
+            self.label(editor, title, 10, MUTED).grid(row=r, column=c, sticky='w', padx=(0, 20), pady=(4,2))
+            entry = self.entry(editor, 36)
+            entry.grid(row=r+1, column=c, sticky='w', padx=(0, 20), pady=(0,6))
+            self.profile_fields[key] = entry
+        controls = tk.Frame(editor, bg=PANEL)
+        controls.grid(row=15, column=0, columnspan=2, sticky='w', pady=(12,4))
+        self.button(controls, 'Lưu hồ sơ', self.save_profile, True).pack(side='left', padx=(0,8))
+        self.button(controls, 'Hồ sơ mới', self.new_profile).pack(side='left', padx=(0,8))
+        self.button(controls, 'Xóa hồ sơ', self.delete_profile).pack(side='left')
+        self.label(editor, 'Lưu trong %APPDATA%\\PythonBot\\config.json dưới dạng văn bản thường. Chỉ nhập thông tin của bạn; không chia sẻ file cấu hình.', 9, MUTED, wraplength=760, justify='left').grid(row=16,column=0,columnspan=2,sticky='w',pady=(10,0))
+        if profiles:
+            self.profile_choice.current(1)
+            self.load_profile_form()
+
+    def load_profile_form(self, event=None):
+        idx = self.profile_choice.current() - 1
+        profiles = self.profile_records()
+        profile = profiles[idx] if 0 <= idx < len(profiles) else {}
+        for key, widget in self.profile_fields.items():
+            widget.delete(0, 'end')
+            widget.insert(0, str(profile.get(key, '')))
+
+    def new_profile(self):
+        self.profile_choice.current(0)
+        self.load_profile_form()
+
+    def save_profile(self):
+        import re as _re
+        form = {key: widget.get().strip() for key, widget in self.profile_fields.items()}
+        required = ('label','last_name','first_name','postal','prefecture','city','address1','phone')
+        missing = [key for key in required if not form[key]]
+        if missing:
+            messagebox.showerror('Hồ sơ', 'Vui lòng nhập đủ các trường có dấu *.')
+            return
+        postal = form['postal'].replace('-', '')
+        if not _re.fullmatch(r'[0-9]{7}', postal):
+            messagebox.showerror('Hồ sơ', 'Mã bưu điện Nhật phải gồm 7 chữ số.')
+            return
+        form['postal'] = postal[:3] + '-' + postal[3:]
+        phone = form['phone'].replace('-', '').replace(' ', '')
+        if not _re.fullmatch(r'0[0-9]{9,10}', phone):
+            messagebox.showerror('Hồ sơ', 'Số điện thoại Nhật cần 10 hoặc 11 chữ số, bắt đầu bằng 0.')
+            return
+        if form['email'] and not _re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', form['email']):
+            messagebox.showerror('Hồ sơ', 'Email không hợp lệ.')
+            return
+        profiles = self.profile_records()
+        idx = self.profile_choice.current() - 1
+        if any(i != idx and p.get('label') == form['label'] for i,p in enumerate(profiles)):
+            messagebox.showerror('Hồ sơ', 'Tên hồ sơ đã tồn tại.')
+            return
+        if 0 <= idx < len(profiles):
+            profiles[idx] = form
+        else:
+            profiles.append(form)
+        self.data['profiles'] = profiles
+        save_data(self.data)
+        self.show_page('Hồ sơ')
+        self.profile_choice.current(profiles.index(form)+1)
+        self.load_profile_form()
+        messagebox.showinfo('Hồ sơ', 'Đã lưu hồ sơ giao hàng.')
+
+    def delete_profile(self):
+        idx = self.profile_choice.current() - 1
+        profiles = self.profile_records()
+        if not 0 <= idx < len(profiles):
+            return
+        if not messagebox.askyesno('Xóa hồ sơ', 'Xóa hồ sơ này?'):
+            return
+        profiles.pop(idx)
+        self.data['profiles'] = profiles
+        save_data(self.data)
+        self.show_page('Hồ sơ')
 
     def page_proxy(self):
         self.heading('Proxy', 'Danh mục proxy (bản 0.1 chỉ quản lý nhãn; chưa kết nối qua proxy)')
@@ -426,6 +520,11 @@ class PythonBot(tk.Tk):
         self.yamada_url = self.entry(p, 85)
         self.yamada_url.insert(0, self.data.get('yamada_guest_url', ''))
         self.yamada_url.pack(anchor='w', pady=6)
+        self.label(p, 'Hồ sơ giao hàng (chọn để quản lý, chưa tự điền website):', 10, MUTED).pack(anchor='w', pady=(12,4))
+        self.yamada_profile = ttk.Combobox(p, state='readonly', width=40,
+            values=['Chưa chọn'] + [str(v.get('label','')) for v in self.profile_records()])
+        self.yamada_profile.current(0)
+        self.yamada_profile.pack(anchor='w', pady=4)
         self.label(p, 'Chế độ thử an toàn: mở trang và thử thêm giỏ; luôn dừng trước xác nhận đơn hàng.', 10, MUTED, wraplength=740).pack(anchor='w', pady=7)
         row = tk.Frame(p, bg=PANEL)
         row.pack(anchor='w', pady=10)
