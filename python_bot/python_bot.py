@@ -1,4 +1,4 @@
-"""Python Bot v0.9.19 - desktop website monitor (standard library only)."""
+"""Python Bot v0.9.20 - desktop website monitor (standard library only)."""
 import json
 import os
 import queue
@@ -29,7 +29,7 @@ def matches_tasks(message, tasks):
 # Release automation: versioned source is published by GitHub Actions.
 # Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
-VERSION = '0.9.19'
+VERSION = '0.9.20'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
 DATA_FILE = BASE / 'config.json'
 BG = '#101116'
@@ -790,11 +790,18 @@ class PythonBot(tk.Tk):
                         try:
                             page.goto(url, wait_until='commit', timeout=12000)
                             emit('Phản hồi đầu tiên sau %.1f giây.' % (_timer.perf_counter() - load_started))
-                        except PWTimeout:
-                            # Some sites display their document before navigation completes.
-                            emit('Yamada phản hồi chậm; kiểm tra trực tiếp nội dung đang hiện...')
+                        except PWTimeout as exc:
+                            emit('Yamada Headless timeout trước phản hồi HTTP; không thử thêm giỏ. ' + str(exc)[:95])
+                            return
                         except PWError as exc:
-                            emit('Lỗi điều hướng: ' + str(exc)[:120] + '. Kiểm tra xem trang có hiển thị được không.')
+                            emit('Yamada Headless bị lỗi điều hướng: ' + str(exc)[:175])
+                            emit('Đã dừng an toàn. Dùng Mở trong trình duyệt thật để kiểm tra, không tự gửi checkout.')
+                            return
+                        actual_url = page.url
+                        host = (urlparse(actual_url).hostname or '').lower()
+                        if actual_url.startswith(('about:', 'chrome-error:')) or host not in ('www.yamada-denkiweb.com', 'yamada-denkiweb.com'):
+                            emit('Trang không hợp lệ sau điều hướng: ' + actual_url[:150] + '. Không thực hiện AutoCart.')
+                            return
                         try:
                             page.locator('body').wait_for(state='visible', timeout=10000)
                         except PWError:
