@@ -27,6 +27,7 @@ def matches_tasks(message, tasks):
 
 
 # Release automation: versioned source is published by GitHub Actions.
+# Compatibility build: keep v0.6.0 self-contained for the v0.5 updater.
 APP_NAME = 'Python Bot'
 VERSION = '0.6.0'
 BASE = Path(os.getenv('APPDATA', str(Path.home()))) / 'PythonBot'
