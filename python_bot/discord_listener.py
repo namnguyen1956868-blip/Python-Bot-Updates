@@ -49,7 +49,7 @@ def listen(events, channel_id):
             if parsed.scheme in ('http', 'https') and parsed.hostname and url not in unique:
                 unique.add(url)
                 events.put(('discord_url', url, channel_id))
-        events.put(('discord_signal', channel_id))
+        events.put(('discord_signal', channel_id, '\n'.join(parts)))
 
     try:
         events.put(('discord_state', 'Đang kết nối Discord...'))
